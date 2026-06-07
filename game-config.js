@@ -30,13 +30,14 @@ window.GAME_CONFIG = {
   hookTopPadding: 8, // Distancia minima entre o anzol e a linha da agua.
   hookBottomPadding: 54, // Distancia minima entre o anzol e o fundo do canvas.
   collectLineOffset: 28, // Altura acima da qual o peixe e recolhido.
-  shockDuration: 5000, // Alforreca prende o jogador durante 5 segundos.
+  shockDuration: 3000, // Duracao do choque em milissegundos. 3000 = 3 segundos; 5000 = 5 segundos.
 
   // ------------------------------
   // Regras de pontuacao especial
   // ------------------------------
   shinyMultiplier: 4, // Peixes shiny dao x4 pontos.
   bigFishUnlockScore: 200, // Peixe grande so aparece depois destes pontos.
+  bigFishUnlockSeconds: 30, // Peixe grande so aparece depois deste tempo de jogo.
 
   // ------------------------------
   // Fuga do peixe grande
@@ -123,7 +124,7 @@ window.GAME_CONFIG = {
     kind: "bigFish",
     points: 1000,
     color: "#2f9f8d",
-    chance: 7,
+    chance: 7, // Ja nao controla o aparecimento; fica aqui para futura experimentacao.
     shinyChance: 0.002,
     width: 150,
     height: 64,
@@ -162,7 +163,7 @@ window.GAME_CONFIG = {
     {
       name: "Garrafa",
       kind: "trash",
-      points: 0,
+      points: -10,
       color: "#45b36a",
       chance: 7,
       width: 54,
@@ -173,7 +174,7 @@ window.GAME_CONFIG = {
     {
       name: "Bota velha",
       kind: "trash",
-      points: 0,
+      points: -20,
       color: "#9b671f",
       chance: 5,
       width: 64,

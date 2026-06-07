@@ -22,6 +22,7 @@
       <div id="gameOverScreen" class="overlay hidden">
         <h2>Fim do jogo!</h2>
         <p>Pontuação final: <strong id="finalScore">0</strong></p>
+        <canvas id="summaryCanvas" class="summary-canvas" width="780" height="360"></canvas>
         <p class="small-text">Os alunos podem trocar os desenhos temporários por pixel art na pasta assets.</p>
         <button id="restartButton">Jogar outra vez</button>
       </div>
@@ -29,6 +30,7 @@
   </main>
 
   <script src="game-config.js"></script>
+  <script src="game-draw.js"></script>
   <script src="game.js"></script>
 </body>
 </html>

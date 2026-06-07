@@ -78,6 +78,15 @@ button:hover {
   font-size: 16px;
 }
 
+.summary-canvas {
+  width: min(780px, 92vw);
+  height: auto;
+  margin: 8px auto 16px;
+  border: 3px solid rgba(255, 255, 255, 0.8);
+  border-radius: 8px;
+  background: #f7fbff;
+}
+
 .hidden {
   display: none;
 }

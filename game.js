@@ -11,7 +11,10 @@
   5. Eventos do rato/toque e botoes.
   6. Logica principal do jogo.
   7. Colisoes e regras especiais.
-  8. Funcoes de desenho no Canvas.
+  8. Funcoes de desenho da cena principal.
+
+  Nota: os desenhos temporarios dos objetos estao em game-draw.js.
+  Assim os alunos podem mudar os desenhos sem mexer muito na logica.
 
   A ideia e manter tudo simples para a turma poder ler, mudar valores
   e substituir os desenhos temporarios por imagens na pasta assets.
@@ -56,8 +59,11 @@ const gameSeconds = config.gameSeconds;
 // Duracao do choque da alforreca em milissegundos.
 const shockDuration = config.shockDuration;
 
-// O peixe grande so pode aparecer depois desta pontuacao.
+// O peixe grande so pode aparecer depois desta pontuacao e do tempo minimo.
 const bigFishUnlockScore = config.bigFishUnlockScore;
+
+// O peixe grande tambem precisa deste tempo minimo de partida.
+const bigFishUnlockSeconds = config.bigFishUnlockSeconds;
 
 // ============================================================
 // 3. Estado da partida
@@ -72,6 +78,7 @@ let carriedItem = null;
 let items = [];
 let recentCatch = [];
 let caughtCounts = {};
+let catchSummary = {};
 let lastSpawnTime = 0;
 let gameStartTime = 0;
 let animationId = 0;
@@ -161,6 +168,7 @@ function startGame() {
   items = [];
   recentCatch = [];
   caughtCounts = {};
+  catchSummary = {};
   lastSpawnTime = 0;
   gameStartTime = performance.now();
   shockUntil = 0;
@@ -245,8 +253,14 @@ function updateItems(timestamp) {
   }
 
   for (const item of items) {
+    item.previousX = item.x;
     updateSpecialItemMovement(item, timestamp);
     item.x += item.speed * item.direction;
+
+    if (item.kind === "sharkHazard" && hasCrossedHookLine(item)) {
+      item.hasPassedHookLine = true;
+    }
+
     item.swimOffset += 0.05;
     item.y += Math.sin(item.swimOffset) * 0.25;
   }
@@ -261,6 +275,11 @@ function updateItems(timestamp) {
   primeiro afasta-se rapido do anzol, depois volta a nadar devagar.
 */
 function updateSpecialItemMovement(item, timestamp) {
+  if (item.kind === "sharkHazard") {
+    updateSharkMovement(item);
+    return;
+  }
+
   if (item.kind !== "bigFish") return;
 
   if (item.fleeUntil && timestamp >= item.fleeUntil) {
@@ -277,12 +296,32 @@ function updateSpecialItemMovement(item, timestamp) {
   }
 }
 
+/*
+  Movimento especial do tubarao:
+  enquanto ainda nao passou a linha do anzol, ele corrige a altura
+  para ir diretamente ao anzol/isco. Depois disso, segue em frente
+  ate sair pelo lado oposto.
+*/
+function updateSharkMovement(item) {
+  if (item.hasPassedHookLine) return;
+
+  const targetY = carriedItem
+    ? carriedItem.y + carriedItem.height / 2 - item.height / 2
+    : hookY - item.height / 2;
+
+  item.y += (clamp(targetY, seaTop + 12, canvas.height - item.height - 24) - item.y) * 0.18;
+
+  if (hasCrossedHookLine(item)) {
+    item.hasPassedHookLine = true;
+  }
+}
+
 // Cria um novo peixe/lixo/perigo numa das laterais do ecrã.
 function spawnItem() {
   const type = prepareSpawnedItem(chooseItemType());
   const direction = Math.random() > 0.5 ? 1 : -1;
   const x = direction === 1 ? -90 : canvas.width + 90;
-  const y = seaTop + 70 + Math.random() * (canvas.height - seaTop - 150);
+  const y = getSpawnY(type);
 
   items.push({
     ...type,
@@ -296,6 +335,19 @@ function spawnItem() {
   if (type.kind === "bigFish") {
     bigFishHasSpawned = true;
   }
+}
+
+// Escolhe a altura inicial. O tubarao nasce alinhado com o anzol/isco.
+function getSpawnY(type) {
+  if (type.kind !== "sharkHazard") {
+    return seaTop + 70 + Math.random() * (canvas.height - seaTop - 150);
+  }
+
+  const targetY = carriedItem
+    ? carriedItem.y + carriedItem.height / 2 - type.height / 2
+    : hookY - type.height / 2;
+
+  return clamp(targetY, seaTop + 12, canvas.height - type.height - 24);
 }
 
 // Prepara um objeto acabado de nascer, incluindo a versao shiny se sair sorte.
@@ -324,6 +376,10 @@ function prepareSpawnedItem(type) {
   Depois escolhe um objeto dentro dessa categoria usando os pesos "chance".
 */
 function chooseItemType() {
+  if (shouldForceBigFishSpawn(performance.now())) {
+    return bigFishType;
+  }
+
   const difficulty = getCurrentDifficulty(performance.now());
   const category = chooseWeightedCategory(difficulty.weights);
   let availableTypes = [];
@@ -334,10 +390,6 @@ function chooseItemType() {
     availableTypes = trashTypes;
   } else {
     availableTypes = dangerTypes;
-  }
-
-  if (category === "fish" && score >= bigFishUnlockScore && !bigFishHasSpawned && !bigFishCaught) {
-    availableTypes = [...availableTypes, bigFishType];
   }
 
   if (category === "danger") {
@@ -353,6 +405,19 @@ function chooseItemType() {
   }
 
   return availableTypes[0];
+}
+
+/*
+  O peixe grande nao usa probabilidade.
+  Assim que o jogador chega aos 30 segundos e tem mais de 200 pontos,
+  o proximo spawn cria obrigatoriamente o peixe grande.
+*/
+function shouldForceBigFishSpawn(timestamp) {
+  if (bigFishHasSpawned || bigFishCaught) return false;
+  if (score <= bigFishUnlockScore) return false;
+
+  const elapsedSeconds = Math.floor((timestamp - gameStartTime) / 1000);
+  return elapsedSeconds >= bigFishUnlockSeconds;
 }
 
 // Escolhe uma categoria com base nos pesos da dificuldade atual.
@@ -453,7 +518,9 @@ function checkDangerWhileCarrying(hookBox, timestamp) {
 function checkSharkStealCollision(timestamp) {
   if (!carriedItem) return;
 
-  const shark = items.find((item) => item.kind === "sharkHazard" && boxesTouch(carriedItem, item));
+  const shark = items.find((item) => {
+    return item.kind === "sharkHazard" && (boxesTouch(carriedItem, item) || hasCrossedHookLine(item));
+  });
 
   if (!shark) return;
 
@@ -461,6 +528,19 @@ function checkSharkStealCollision(timestamp) {
   carriedItem = null;
   shark.justAteUntil = timestamp + 800;
   showStatus(`O Tubarao comeu ${eatenName}!`);
+}
+
+// Verifica se o tubarao acabou de cruzar a linha vertical do anzol.
+function hasCrossedHookLine(item) {
+  if (typeof item.previousX !== "number") return false;
+
+  const previousCenterX = item.previousX + item.width / 2;
+  const currentCenterX = item.x + item.width / 2;
+
+  return (
+    (previousCenterX <= hookX && currentCenterX >= hookX) ||
+    (previousCenterX >= hookX && currentCenterX <= hookX)
+  );
 }
 
 // O peixe grande so pode ser fisgado usando um peixe normal como isco.
@@ -477,8 +557,8 @@ function checkBigFishBaitCollision(timestamp) {
     baitName,
     escapeChance,
     hookedAt: timestamp,
-    escapeAt: timestamp + 250 + Math.random() * 450,
-    finalEscapeChance: Math.min(0.98, escapeChance + 0.08)
+    escapeAt: timestamp + randomBetween(config.bigFishEscapeDelayMin, config.bigFishEscapeDelayMax),
+    finalEscapeChance: Math.min(0.98, escapeChance + config.bigFishFinalEscapeBonus)
   };
   items = items.filter((item) => item !== bigFish);
   showStatus(`Peixe grande mordeu o isco: ${baitName}!`);
@@ -487,6 +567,7 @@ function checkBigFishBaitCollision(timestamp) {
 // Recolhe o objeto quando chega a linha da agua e atualiza pontuacao/contadores.
 function collectCarriedItem() {
   score += carriedItem.points;
+  recordCatch(carriedItem);
 
   if (carriedItem.kind === "fish") {
     const countName = carriedItem.baseName || carriedItem.name;
@@ -505,6 +586,7 @@ function collectCarriedItem() {
 // Aplica a penalizacao da alforreca e bloqueia o jogador por alguns segundos.
 function triggerShock(item, timestamp) {
   score += item.points;
+  recordCatch(item);
 
   if (carriedItem && carriedItem.kind === "bigFish") {
     releaseBigFishToSea(carriedItem, timestamp, "A alforreca assustou o peixe grande!");
@@ -514,6 +596,29 @@ function triggerShock(item, timestamp) {
 
   shockUntil = timestamp + shockDuration;
   showStatus("Choque da alforreca! Espera 5 segundos.");
+}
+
+// Guarda um item no resumo final: quantidade, pontos por unidade e total.
+function recordCatch(item) {
+  const key = item.name;
+
+  if (!catchSummary[key]) {
+    catchSummary[key] = {
+      name: item.name,
+      kind: item.kind,
+      points: item.points,
+      color: item.color,
+      width: item.width,
+      height: item.height,
+      isShiny: Boolean(item.isShiny),
+      baseName: item.baseName || item.name,
+      quantity: 0,
+      totalPoints: 0
+    };
+  }
+
+  catchSummary[key].quantity += 1;
+  catchSummary[key].totalPoints += item.points;
 }
 
 // Primeira tentativa de fuga do peixe grande depois de morder o isco.
@@ -546,14 +651,16 @@ function releaseBigFishToSea(bigFish, timestamp, message) {
   const returnDirection = bigFish.direction || 1;
 
   items.push({
-    ...bigFishType,
+    ...bigFish,
     x: hookX - bigFish.width / 2,
     y: clamp(hookY + 42, seaTop + 60, canvas.height - 110),
     direction: escapeDirection,
-    speed: 2.7,
+    speed: config.bigFishFleeSpeed,
     swimOffset: Math.random() * Math.PI * 2,
-    fleeUntil: timestamp + 1200,
-    returnDirection
+    fleeUntil: timestamp + config.bigFishFleeDuration,
+    returnDirection,
+    escapeAt: 0,
+    finalEscapeChance: 0
   });
 
   carriedItem = null;
@@ -575,6 +682,7 @@ function isShocked(timestamp) {
 function endGame() {
   gameRunning = false;
   finalScoreElement.textContent = score;
+  drawFinalSummary(Object.values(catchSummary));
   gameOverScreen.classList.remove("hidden");
 }
 
@@ -614,7 +722,7 @@ function toHex(value) {
 }
 
 // ============================================================
-// 8. Desenho do jogo no Canvas
+// 8. Desenho da cena principal no Canvas
 // ============================================================
 
 // Desenha um frame completo do jogo.
@@ -804,282 +912,6 @@ function drawItems() {
   for (const item of items) {
     drawItem(item);
   }
-}
-
-/*
-  Decide qual desenho usar para cada objeto.
-  "caughtOnHook" desenha os peixes na vertical quando estao presos no anzol.
-*/
-function drawItem(item, showLabel = true, caughtOnHook = false) {
-  if (item.name.includes("Lula") || item.baseName === "Lula") {
-    drawSquidPlaceholder(item, caughtOnHook);
-  } else 
-  if (caughtOnHook && (item.kind === "fish" || item.kind === "bigFish")) {
-    drawCaughtFishPlaceholder(item);
-  } else if (item.kind === "fish") {
-    drawFishPlaceholder(item);
-  } else if (item.kind === "bigFish") {
-    drawBigFishPlaceholder(item);
-  } else if (item.kind === "sharkHazard") {
-    drawSharkHazardPlaceholder(item);
-  } else if (item.kind === "danger") {
-    drawJellyfishPlaceholder(item);
-  } else {
-    drawTrashPlaceholder(item);
-  }
-
-  if (showLabel) {
-    drawText(item.name, item.x + 4, item.y - 8, 14, "#10263f", "bold");
-
-    if (item.isShiny) {
-      drawText("x4", item.x + item.width - 22, item.y + item.height + 14, 16, "#7a1cff", "bold");
-    }
-  }
-}
-
-// Desenho temporario de peixe normal a nadar de lado.
-function drawFishPlaceholder(item) {
-  // Placeholder: replace this simple Canvas fish with student pixel art later.
-  const centerX = item.x + item.width / 2;
-  const centerY = item.y + item.height / 2;
-  const noseX = item.direction === 1 ? item.x + item.width : item.x;
-  const tailX = item.direction === 1 ? item.x : item.x + item.width;
-
-  ctx.fillStyle = item.color;
-  ctx.beginPath();
-  ctx.ellipse(centerX, centerY, item.width * 0.32, item.height * 0.48, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(tailX, centerY);
-  ctx.lineTo(tailX - 22 * item.direction, item.y + 2);
-  ctx.lineTo(tailX - 22 * item.direction, item.y + item.height - 2);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = "#ffffff";
-  ctx.beginPath();
-  ctx.arc(noseX - 15 * item.direction, centerY - 6, 6, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = "#111111";
-  ctx.beginPath();
-  ctx.arc(noseX - 14 * item.direction, centerY - 6, 3, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = "#111111";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(centerX + 8 * item.direction, centerY + 3);
-  ctx.lineTo(centerX + 18 * item.direction, centerY + 8);
-  ctx.stroke();
-}
-
-// Desenho temporario dos peixes presos no anzol, de cabeca para cima.
-function drawCaughtFishPlaceholder(item) {
-  // Fish on the hook are drawn head-up so they look attached to the line.
-  const centerX = item.x + item.width / 2;
-  const centerY = item.y + item.height / 2 + item.width * 0.12;
-  const bodyRadiusX = item.height * 0.45;
-  const bodyRadiusY = item.width * 0.28;
-  const noseY = centerY - bodyRadiusY;
-  const tailY = centerY + bodyRadiusY;
-
-  ctx.fillStyle = item.color;
-  ctx.beginPath();
-  ctx.ellipse(centerX, centerY, bodyRadiusX, bodyRadiusY, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(centerX, tailY + 18);
-  ctx.lineTo(centerX - bodyRadiusX, tailY - 2);
-  ctx.lineTo(centerX + bodyRadiusX, tailY - 2);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = "#ffffff";
-  ctx.beginPath();
-  ctx.arc(centerX - 7, noseY + 16, 6, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = "#111111";
-  ctx.beginPath();
-  ctx.arc(centerX - 7, noseY + 15, 3, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = "#111111";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(centerX + 9, centerY - 2);
-  ctx.lineTo(centerX + 17, centerY + 8);
-  ctx.stroke();
-
-  if (item.kind === "bigFish") {
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(centerX - 20, centerY - 12, 9, 5);
-    ctx.fillRect(centerX + 6, centerY + 6, 9, 5);
-  }
-}
-
-// Desenho temporario da lula, no mar ou pendurada no anzol.
-function drawSquidPlaceholder(item, caughtOnHook = false) {
-  const centerX = item.x + item.width / 2;
-  const centerY = item.y + item.height / 2;
-
-  ctx.fillStyle = item.color;
-
-  if (caughtOnHook) {
-    ctx.beginPath();
-    ctx.ellipse(centerX, centerY - 12, item.height * 0.38, item.width * 0.22, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    for (let index = 0; index < 5; index += 1) {
-      const x = centerX - 20 + index * 10;
-      ctx.beginPath();
-      ctx.moveTo(x, centerY + 8);
-      ctx.lineTo(x - 4, centerY + 34);
-      ctx.strokeStyle = item.color;
-      ctx.lineWidth = 4;
-      ctx.stroke();
-    }
-  } else {
-    ctx.beginPath();
-    ctx.ellipse(centerX, centerY, item.width * 0.28, item.height * 0.45, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    const tentacleStart = item.direction === 1 ? item.x + 16 : item.x + item.width - 16;
-    for (let index = 0; index < 5; index += 1) {
-      const y = item.y + 8 + index * 7;
-      ctx.beginPath();
-      ctx.moveTo(tentacleStart, y);
-      ctx.lineTo(tentacleStart - 22 * item.direction, y + 4);
-      ctx.strokeStyle = item.color;
-      ctx.lineWidth = 4;
-      ctx.stroke();
-    }
-  }
-
-  ctx.fillStyle = "#111111";
-  ctx.beginPath();
-  ctx.arc(centerX + 8, centerY - 7, 3, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-// Desenho temporario do peixe grande no mar.
-function drawBigFishPlaceholder(item) {
-  // Placeholder: students can replace this with assets/peixe_grande.png later.
-  drawFishPlaceholder(item);
-
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(item.x + item.width * 0.28, item.y + item.height * 0.2, 10, 5);
-  ctx.fillRect(item.x + item.width * 0.42, item.y + item.height * 0.3, 10, 5);
-  ctx.fillRect(item.x + item.width * 0.56, item.y + item.height * 0.42, 10, 5);
-
-  ctx.strokeStyle = "#0e4f48";
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.arc(item.x + item.width * 0.53, item.y + item.height * 0.5, item.height * 0.42, 0.2, 1.2);
-  ctx.stroke();
-}
-
-// Desenho temporario do tubarao-perigo.
-function drawSharkHazardPlaceholder(item) {
-  // Placeholder: students can replace this with assets/tubarao.png later.
-  const centerX = item.x + item.width / 2;
-  const centerY = item.y + item.height / 2;
-  const noseX = item.direction === 1 ? item.x + item.width : item.x;
-  const tailX = item.direction === 1 ? item.x : item.x + item.width;
-
-  ctx.fillStyle = item.color;
-  ctx.beginPath();
-  ctx.ellipse(centerX, centerY, item.width * 0.36, item.height * 0.42, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(centerX - 8 * item.direction, item.y + 6);
-  ctx.lineTo(centerX + 18 * item.direction, item.y - 24);
-  ctx.lineTo(centerX + 28 * item.direction, item.y + 10);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(tailX, centerY);
-  ctx.lineTo(tailX - 34 * item.direction, item.y + 4);
-  ctx.lineTo(tailX - 26 * item.direction, centerY);
-  ctx.lineTo(tailX - 34 * item.direction, item.y + item.height - 4);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = "#ffffff";
-  ctx.beginPath();
-  ctx.arc(noseX - 20 * item.direction, centerY - 8, 7, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = "#111111";
-  ctx.beginPath();
-  ctx.arc(noseX - 18 * item.direction, centerY - 8, 3, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = "#ffffff";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(noseX - 38 * item.direction, centerY + 11);
-  ctx.lineTo(noseX - 16 * item.direction, centerY + 8);
-  ctx.stroke();
-}
-
-// Desenho temporario da alforreca.
-function drawJellyfishPlaceholder(item) {
-  ctx.fillStyle = item.color;
-  ctx.beginPath();
-  ctx.ellipse(item.x + item.width / 2, item.y + 22, item.width / 2, 24, 0, Math.PI, 0);
-  ctx.lineTo(item.x + item.width - 8, item.y + 30);
-  ctx.lineTo(item.x + 8, item.y + 30);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.strokeStyle = "#7330e8";
-  ctx.lineWidth = 4;
-  for (let index = 0; index < 5; index += 1) {
-    const x = item.x + 14 + index * 12;
-    ctx.beginPath();
-    ctx.moveTo(x, item.y + 30);
-    ctx.quadraticCurveTo(x - 10, item.y + 42, x, item.y + 54);
-    ctx.stroke();
-  }
-
-  drawText("Alforreca", item.x + 6, item.y + 36, 16, "#7330e8", "bold");
-}
-
-// Desenho temporario do lixo: garrafa ou bota velha.
-function drawTrashPlaceholder(item) {
-  if (item.name === "Bota velha") {
-    ctx.fillStyle = item.color;
-    ctx.fillRect(item.x + 4, item.y + 18, item.width - 18, item.height - 16);
-    ctx.fillRect(item.x + 24, item.y + 4, item.width - 28, item.height - 22);
-
-    ctx.strokeStyle = "#111111";
-    ctx.lineWidth = 3;
-    ctx.strokeRect(item.x + 4, item.y + 18, item.width - 18, item.height - 16);
-    return;
-  }
-
-  ctx.fillStyle = item.color;
-  ctx.fillRect(item.x + 14, item.y + 6, item.width - 24, item.height - 8);
-
-  ctx.fillStyle = "#d7f7ff";
-  ctx.fillRect(item.x + 18, item.y + 10, item.width - 32, item.height - 16);
-
-  ctx.strokeStyle = "#111111";
-  ctx.lineWidth = 3;
-  ctx.strokeRect(item.x + 14, item.y + 6, item.width - 24, item.height - 8);
-}
-
-// Helper pequeno para escrever texto no Canvas sempre da mesma forma.
-function drawText(text, x, y, size, color, weight = "normal") {
-  ctx.fillStyle = color;
-  ctx.font = `${weight} ${size}px Arial`;
-  ctx.fillText(text, x, y);
 }
 
 // Desenha o ecra inicial parado antes do jogador carregar em Comecar.

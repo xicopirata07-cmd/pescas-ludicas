@@ -16,15 +16,17 @@ Avoid jellyfish.
 
 Trash gives no points.
 
-Jellyfish shock the hook for 5 seconds and remove points.
+Jellyfish shock the hook and remove points. The shock duration is set in `game-config.js`.
 
 Some fish can appear as rare shiny versions with inverted colors. Shiny fish give 4x points.
 
-After 200 points, one big fish can appear.
+After 30 seconds and more than 200 points, one big fish appears automatically.
 
 The big fish is worth 1000 points. It only bites if the hook is already carrying a fish. Small bait fish make the big fish very likely to escape, and it can still escape right before being collected. When it escapes, it returns to the sea instead of disappearing.
 
 The shark is a very rare, very fast and large danger. If it hits anything on the hook, it eats it and keeps swimming out of the screen.
+
+At the end, the game shows a summary with only the items that were caught at least once, including fish, shiny fish, trash and jellyfish shocks.
 
 Difficulty increases with time:
 
@@ -44,6 +46,14 @@ No install, no local server, no accounts, no database.
 ## Game variables
 
 Edit `game-config.js` to change points, speeds, probabilities, shiny rarity, difficulty timing, shark size, jellyfish shock duration and big fish escape chances.
+
+## Project files
+
+- `index.html`: page structure.
+- `style.css`: page and overlay styles.
+- `game-config.js`: easy-to-edit game variables.
+- `game.js`: game rules, movement, collisions, scoring and final summary data.
+- `game-draw.js`: temporary Canvas drawings and final summary drawing.
 
 ## Student art placeholders
 
