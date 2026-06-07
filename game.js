@@ -1,3 +1,26 @@
+/*
+  Mare Pixel: Pesca da Nazare
+  --------------------------------
+  Este ficheiro tem todo o codigo do jogo Canvas.
+
+  Organizacao geral:
+  1. Ligacao aos elementos HTML.
+  2. Constantes de configuracao do jogo.
+  3. Variaveis que mudam durante a partida.
+  4. Tabelas de peixes, perigos, lixo e dificuldade.
+  5. Eventos do rato/toque e botoes.
+  6. Logica principal do jogo.
+  7. Colisoes e regras especiais.
+  8. Funcoes de desenho no Canvas.
+
+  A ideia e manter tudo simples para a turma poder ler, mudar valores
+  e substituir os desenhos temporarios por imagens na pasta assets.
+*/
+
+// ============================================================
+// 1. Elementos HTML usados pelo jogo
+// ============================================================
+
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
@@ -7,16 +30,40 @@ const finalScoreElement = document.getElementById("finalScore");
 const startButton = document.getElementById("startButton");
 const restartButton = document.getElementById("restartButton");
 
+// ============================================================
+// 2. Constantes de configuracao
+// ============================================================
+
+// Linha onde a agua comeca. Tudo acima e ceu/terra; tudo abaixo e mar.
 const seaTop = 282;
+
+// Quando o anzol chega aqui com um objeto, esse objeto e recolhido.
 const collectLineY = seaTop + 28;
+
+// Posicao horizontal fixa do anzol. O jogador controla apenas a altura.
 const hookX = 540;
+
+// Limites verticais do anzol para ele nao sair do mar nem do ecra.
 const hookMinY = seaTop + 8;
 const hookMaxY = canvas.height - 54;
-const gameSeconds = 75;
+
+// Duracao total da partida em segundos. 120 segundos = 2 minutos.
+const gameSeconds = 120;
+
+// Duracao do choque da alforreca em milissegundos.
 const shockDuration = 2000;
+
+// Duracao do bloqueio quando o tubarao come o que esta no anzol.
 const hookLockDuration = 1000;
+
+// O peixe grande so pode aparecer depois desta pontuacao.
 const bigFishUnlockScore = 200;
 
+// ============================================================
+// 3. Estado da partida
+// ============================================================
+
+// Estas variaveis mudam constantemente durante o jogo.
 let score = 0;
 let timeLeft = gameSeconds;
 let gameRunning = false;
@@ -35,6 +82,10 @@ let statusMessageUntil = 0;
 let bigFishHasSpawned = false;
 let bigFishCaught = false;
 
+// ============================================================
+// 4. Dados dos objetos do jogo
+// ============================================================
+
 // Placeholder entries for the students' future pixel art in /assets.
 const assetPlaceholders = [
   "fisherman.png",
@@ -50,6 +101,7 @@ const assetPlaceholders = [
   "bota.png"
 ];
 
+// Peixes normais, perigos e lixo. "chance" e o peso dentro da sua categoria.
 const itemTypes = [
   { name: "Sardinha", kind: "fish", points: 10, color: "#f5c84c", chance: 32, width: 74, height: 34 },
   { name: "Carapau", kind: "fish", points: 15, color: "#c4d0dc", chance: 24, width: 82, height: 36 },
@@ -60,6 +112,7 @@ const itemTypes = [
   { name: "Bota velha", kind: "trash", points: 0, color: "#9b671f", chance: 5, width: 64, height: 44 }
 ];
 
+// Peixe especial: aparece no maximo uma vez, vale muitos pontos e foge muito.
 const bigFishType = {
   name: "Peixe grande",
   kind: "bigFish",
@@ -72,18 +125,21 @@ const bigFishType = {
   speedMax: 0.9
 };
 
+// Tubarao: perigo raro, muito grande e rapido. Come o que estiver no anzol.
 const sharkType = {
   name: "Tubarao",
   kind: "sharkHazard",
   points: 0,
   color: "#37516c",
   chance: 2,
-  width: 138,
-  height: 58,
-  speedMin: 4.8,
-  speedMax: 6.5
+  width: 220,
+  height: 92,
+  speedMin: 9,
+  speedMax: 12
 };
 
+// Probabilidade de o peixe grande fugir conforme o isco usado.
+// Iscos pequenos dao quase sempre fuga; polvo ainda e dificil, mas melhor.
 const bigFishEscapeChanceByBait = {
   Sardinha: 0.98,
   Carapau: 0.94,
@@ -91,6 +147,7 @@ const bigFishEscapeChanceByBait = {
   Polvo: 0.76
 };
 
+// Dificuldade por tempo. O jogo fica mais sujo/perigoso ao longo dos 2 minutos.
 const difficultyLevels = [
   {
     name: "Mar calmo",
@@ -100,23 +157,35 @@ const difficultyLevels = [
   },
   {
     name: "Mar sujo",
-    startsAt: 25,
+    startsAt: 40,
     spawnDelay: 900,
     weights: { fish: 66, trash: 24, danger: 10 }
   },
   {
     name: "Mar perigoso",
-    startsAt: 50,
+    startsAt: 80,
     spawnDelay: 760,
     weights: { fish: 44, trash: 34, danger: 22 }
   }
 ];
 
+// ============================================================
+// 5. Eventos de entrada do jogador
+// ============================================================
+
+// O rato e o dedo controlam diretamente a altura do anzol.
 canvas.addEventListener("mousemove", updatePointer);
 canvas.addEventListener("touchmove", updatePointer, { passive: false });
+
+// Botoes para comecar e reiniciar a partida.
 startButton.addEventListener("click", startGame);
 restartButton.addEventListener("click", startGame);
 
+/*
+  Le a posicao vertical do rato/toque dentro do canvas.
+  O anzol segue essa posicao diretamente, sem fisica ou atraso.
+  Se o jogador estiver em choque ou com o anzol preso, ignoramos o input.
+*/
 function updatePointer(event) {
   if (event.type === "touchmove") {
     event.preventDefault();
@@ -134,6 +203,14 @@ function updatePointer(event) {
   hookY = clamp(mouseY, hookMinY, hookMaxY);
 }
 
+// ============================================================
+// 6. Ciclo principal da partida
+// ============================================================
+
+/*
+  Reinicia todos os valores importantes e arranca o loop de animacao.
+  E usado tanto pelo botao Comecar como pelo botao Jogar outra vez.
+*/
 function startGame() {
   cancelAnimationFrame(animationId);
 
@@ -160,6 +237,14 @@ function startGame() {
   animationId = requestAnimationFrame(gameLoop);
 }
 
+/*
+  Loop principal: acontece muitas vezes por segundo.
+  A ordem importa:
+  1. atualiza tempo;
+  2. atualiza anzol e objetos;
+  3. verifica colisoes;
+  4. desenha o novo frame.
+*/
 function gameLoop(timestamp) {
   if (!gameRunning) return;
 
@@ -177,11 +262,17 @@ function gameLoop(timestamp) {
   animationId = requestAnimationFrame(gameLoop);
 }
 
+// Calcula quantos segundos faltam a partir do tempo real da partida.
 function updateTimer(timestamp) {
   const elapsedSeconds = Math.floor((timestamp - gameStartTime) / 1000);
   timeLeft = Math.max(0, gameSeconds - elapsedSeconds);
 }
 
+/*
+  Atualiza o objeto preso ao anzol.
+  Se for peixe grande, ele pode fugir antes de ser recolhido.
+  Se o anzol chega a linha da agua, o item e recolhido.
+*/
 function updateHook(timestamp) {
   if (carriedItem) {
     carriedItem.x = hookX - carriedItem.width / 2;
@@ -202,6 +293,11 @@ function updateHook(timestamp) {
   }
 }
 
+/*
+  Cria novos objetos com base na dificuldade atual e move todos os objetos.
+  O peixe grande e especial: nao e removido so por sair da borda,
+  porque ele deve continuar no jogo ate ser apanhado ou comido.
+*/
 function updateItems(timestamp) {
   const difficulty = getCurrentDifficulty(timestamp);
 
@@ -222,6 +318,10 @@ function updateItems(timestamp) {
   });
 }
 
+/*
+  Movimento especial do peixe grande depois de fugir:
+  primeiro afasta-se rapido do anzol, depois volta a nadar devagar.
+*/
 function updateSpecialItemMovement(item, timestamp) {
   if (item.kind !== "bigFish") return;
 
@@ -239,6 +339,7 @@ function updateSpecialItemMovement(item, timestamp) {
   }
 }
 
+// Cria um novo peixe/lixo/perigo numa das laterais do ecrã.
 function spawnItem() {
   const type = chooseItemType();
   const direction = Math.random() > 0.5 ? 1 : -1;
@@ -259,6 +360,11 @@ function spawnItem() {
   }
 }
 
+/*
+  Decide que tipo de objeto nasce agora.
+  Primeiro escolhe a categoria geral pela dificuldade: fish/trash/danger.
+  Depois escolhe um objeto dentro dessa categoria usando os pesos "chance".
+*/
 function chooseItemType() {
   const difficulty = getCurrentDifficulty(performance.now());
   const category = chooseWeightedCategory(difficulty.weights);
@@ -283,6 +389,7 @@ function chooseItemType() {
   return availableTypes[0];
 }
 
+// Escolhe uma categoria com base nos pesos da dificuldade atual.
 function chooseWeightedCategory(weights) {
   const totalWeight = weights.fish + weights.trash + weights.danger;
   let random = Math.random() * totalWeight;
@@ -296,6 +403,7 @@ function chooseWeightedCategory(weights) {
   return "danger";
 }
 
+// Devolve o nivel de dificuldade atual com base no tempo ja jogado.
 function getCurrentDifficulty(timestamp) {
   if (!gameRunning) {
     return difficultyLevels[0];
@@ -313,6 +421,19 @@ function getCurrentDifficulty(timestamp) {
   return currentLevel;
 }
 
+// ============================================================
+// 7. Colisoes e regras do jogo
+// ============================================================
+
+/*
+  Verifica se o anzol ou o objeto preso tocaram noutro objeto.
+  Regras principais:
+  - anzol vazio apanha peixe normal/lixo;
+  - anzol vazio nao apanha peixe grande nem tubarao;
+  - alforreca da choque;
+  - tubarao come o que estiver no anzol;
+  - peixe grande so morde se ja houver um peixe no anzol.
+*/
 function checkCollisions(timestamp) {
   const hookBox = {
     x: hookX - 12,
@@ -350,6 +471,7 @@ function checkCollisions(timestamp) {
   }
 }
 
+// Se uma alforreca toca no anzol ou no objeto preso, ativa choque.
 function checkDangerWhileCarrying(hookBox, timestamp) {
   const danger = items.find((item) => {
     return item.kind === "danger" && (boxesTouch(hookBox, item) || boxesTouch(carriedItem, item));
@@ -361,6 +483,7 @@ function checkDangerWhileCarrying(hookBox, timestamp) {
   items = items.filter((item) => item !== danger);
 }
 
+// O tubarao come qualquer coisa que o jogador esteja a carregar.
 function checkSharkStealCollision(timestamp) {
   if (!carriedItem) return;
 
@@ -368,17 +491,14 @@ function checkSharkStealCollision(timestamp) {
 
   if (!shark) return;
 
-  if (carriedItem.kind === "bigFish") {
-    releaseBigFishToSea(carriedItem, timestamp, "O Tubarao assustou o peixe grande!");
-  } else {
-    carriedItem = null;
-    showStatus("O Tubarao roubou o peixe! Anzol preso 1 segundo.");
-  }
-
+  const eatenName = carriedItem.name;
+  carriedItem = null;
   hookLockedUntil = timestamp + hookLockDuration;
   items = items.filter((item) => item !== shark);
+  showStatus(`O Tubarao comeu ${eatenName}! Anzol preso 1 segundo.`);
 }
 
+// O peixe grande so pode ser fisgado usando um peixe normal como isco.
 function checkBigFishBaitCollision(timestamp) {
   const bigFish = items.find((item) => item.kind === "bigFish" && boxesTouch(carriedItem, item));
 
@@ -399,6 +519,7 @@ function checkBigFishBaitCollision(timestamp) {
   showStatus(`Peixe grande mordeu o isco: ${baitName}!`);
 }
 
+// Recolhe o objeto quando chega a linha da agua e atualiza pontuacao/contadores.
 function collectCarriedItem() {
   score += carriedItem.points;
 
@@ -415,6 +536,7 @@ function collectCarriedItem() {
   carriedItem = null;
 }
 
+// Aplica a penalizacao da alforreca e bloqueia o jogador por alguns segundos.
 function triggerShock(item, timestamp) {
   score += item.points;
 
@@ -428,6 +550,7 @@ function triggerShock(item, timestamp) {
   showStatus("Choque da alforreca! Espera 2 segundos.");
 }
 
+// Primeira tentativa de fuga do peixe grande depois de morder o isco.
 function tryBigFishEscape(bigFish, timestamp) {
   if (Math.random() < bigFish.escapeChance) {
     releaseBigFishToSea(bigFish, timestamp, `O peixe grande largou o anzol! Isco: ${bigFish.baitName}.`);
@@ -438,6 +561,7 @@ function tryBigFishEscape(bigFish, timestamp) {
   carriedItem.escapeAt = Number.POSITIVE_INFINITY;
 }
 
+// Segunda tentativa de fuga do peixe grande mesmo antes de ser recolhido.
 function tryBigFishFinalEscape(bigFish, timestamp) {
   if (Math.random() < bigFish.finalEscapeChance) {
     releaseBigFishToSea(bigFish, timestamp, "O peixe grande escapou mesmo à beira da água!");
@@ -447,6 +571,10 @@ function tryBigFishFinalEscape(bigFish, timestamp) {
   return false;
 }
 
+/*
+  Devolve o peixe grande ao mar quando ele escapa.
+  Ele nasce perto do anzol, foge rapido um pouco, e depois volta ao ritmo lento.
+*/
 function releaseBigFishToSea(bigFish, timestamp, message) {
   const escapeDirection = bigFish.direction ? -bigFish.direction : -1;
   const returnDirection = bigFish.direction || 1;
@@ -466,25 +594,30 @@ function releaseBigFishToSea(bigFish, timestamp, message) {
   showStatus(message);
 }
 
+// Mostra uma mensagem temporaria no HUD.
 function showStatus(message) {
   statusMessage = message;
   statusMessageUntil = performance.now() + 2400;
 }
 
+// Verdadeiro enquanto o jogador esta em choque por causa da alforreca.
 function isShocked(timestamp) {
   return timestamp < shockUntil;
 }
 
+// Verdadeiro enquanto o tubarao deixou o anzol preso.
 function isHookLocked(timestamp) {
   return timestamp < hookLockedUntil;
 }
 
+// Termina a partida e mostra o ecrã de fim de jogo.
 function endGame() {
   gameRunning = false;
   finalScoreElement.textContent = score;
   gameOverScreen.classList.remove("hidden");
 }
 
+// Colisao simples entre dois retangulos.
 function boxesTouch(a, b) {
   return (
     a.x < b.x + b.width &&
@@ -494,14 +627,21 @@ function boxesTouch(a, b) {
   );
 }
 
+// Limita um valor entre minimo e maximo.
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+// Sorteia um numero decimal entre minimo e maximo.
 function randomBetween(min, max) {
   return min + Math.random() * (max - min);
 }
 
+// ============================================================
+// 8. Desenho do jogo no Canvas
+// ============================================================
+
+// Desenha um frame completo do jogo.
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -520,6 +660,7 @@ function draw() {
   drawHud();
 }
 
+// Desenha o ceu e os pontinhos decorativos do fundo.
 function drawSky() {
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, canvas.width, seaTop);
@@ -532,6 +673,7 @@ function drawSky() {
   }
 }
 
+// Desenha a agua e uma linha ondulada na superficie.
 function drawSea() {
   const waterGradient = ctx.createLinearGradient(0, seaTop, 0, canvas.height);
   waterGradient.addColorStop(0, "#55c0e6");
@@ -549,6 +691,7 @@ function drawSea() {
   ctx.stroke();
 }
 
+// Desenha as arribas/rochas temporarias.
 function drawCliffs() {
   ctx.fillStyle = "#ffd34d";
   ctx.fillRect(18, 194, 430, 96);
@@ -562,6 +705,7 @@ function drawCliffs() {
   drawText("Arribas e rochas", 820, 246, 28, "#111111", "bold");
 }
 
+// Desenha o pescador temporario.
 function drawFishermanPlaceholder() {
   // Placeholder: students can replace this with assets/fisherman.png later.
   ctx.fillStyle = "#62c462";
@@ -584,6 +728,7 @@ function drawFishermanPlaceholder() {
   ctx.stroke();
 }
 
+// Desenha no topo esquerdo os ultimos peixes recolhidos.
 function drawCollectionPile() {
   drawText("Peixes apanhados", 178, 166, 22, "#111111", "bold");
 
@@ -600,6 +745,11 @@ function drawCollectionPile() {
   });
 }
 
+/*
+  Desenha a linha, boia e anzol.
+  Quando ha choque, fica vermelho/amarelo.
+  Quando o tubarao prende o anzol, fica azul.
+*/
 function drawFishingLine() {
   const shocked = isShocked(performance.now());
   const locked = isHookLocked(performance.now());
@@ -653,6 +803,7 @@ function drawFishingLine() {
   }
 }
 
+// Desenha pontuacao, tempo, contadores, nivel e mensagens temporarias.
 function drawHud() {
   drawText("Tipos de peixe", 32, 42, 22, "#111111", "bold");
   drawText(`Sardinha: ${caughtCounts.Sardinha || 0}`, 32, 72, 18, "#111111");
@@ -685,12 +836,17 @@ function drawHud() {
   drawText("Placeholders: " + assetPlaceholders.slice(0, 4).join(", ") + "...", 32, 690, 14, "#0d3850");
 }
 
+// Desenha todos os objetos livres que estao no mar.
 function drawItems() {
   for (const item of items) {
     drawItem(item);
   }
 }
 
+/*
+  Decide qual desenho usar para cada objeto.
+  "caughtOnHook" desenha os peixes na vertical quando estao presos no anzol.
+*/
 function drawItem(item, showLabel = true, caughtOnHook = false) {
   if (caughtOnHook && (item.kind === "fish" || item.kind === "bigFish")) {
     drawCaughtFishPlaceholder(item);
@@ -711,6 +867,7 @@ function drawItem(item, showLabel = true, caughtOnHook = false) {
   }
 }
 
+// Desenho temporario de peixe normal a nadar de lado.
 function drawFishPlaceholder(item) {
   // Placeholder: replace this simple Canvas fish with student pixel art later.
   const centerX = item.x + item.width / 2;
@@ -748,6 +905,7 @@ function drawFishPlaceholder(item) {
   ctx.stroke();
 }
 
+// Desenho temporario dos peixes presos no anzol, de cabeca para cima.
 function drawCaughtFishPlaceholder(item) {
   // Fish on the hook are drawn head-up so they look attached to the line.
   const centerX = item.x + item.width / 2;
@@ -793,6 +951,7 @@ function drawCaughtFishPlaceholder(item) {
   }
 }
 
+// Desenho temporario do peixe grande no mar.
 function drawBigFishPlaceholder(item) {
   // Placeholder: students can replace this with assets/peixe_grande.png later.
   drawFishPlaceholder(item);
@@ -809,6 +968,7 @@ function drawBigFishPlaceholder(item) {
   ctx.stroke();
 }
 
+// Desenho temporario do tubarao-perigo.
 function drawSharkHazardPlaceholder(item) {
   // Placeholder: students can replace this with assets/tubarao.png later.
   const centerX = item.x + item.width / 2;
@@ -854,6 +1014,7 @@ function drawSharkHazardPlaceholder(item) {
   ctx.stroke();
 }
 
+// Desenho temporario da alforreca.
 function drawJellyfishPlaceholder(item) {
   ctx.fillStyle = item.color;
   ctx.beginPath();
@@ -876,6 +1037,7 @@ function drawJellyfishPlaceholder(item) {
   drawText("Alforreca", item.x + 6, item.y + 36, 16, "#7330e8", "bold");
 }
 
+// Desenho temporario do lixo: garrafa ou bota velha.
 function drawTrashPlaceholder(item) {
   if (item.name === "Bota velha") {
     ctx.fillStyle = item.color;
@@ -899,10 +1061,12 @@ function drawTrashPlaceholder(item) {
   ctx.strokeRect(item.x + 14, item.y + 6, item.width - 24, item.height - 8);
 }
 
+// Helper pequeno para escrever texto no Canvas sempre da mesma forma.
 function drawText(text, x, y, size, color, weight = "normal") {
   ctx.fillStyle = color;
   ctx.font = `${weight} ${size}px Arial`;
   ctx.fillText(text, x, y);
 }
 
+// Desenha o ecra inicial parado antes do jogador carregar em Comecar.
 draw();

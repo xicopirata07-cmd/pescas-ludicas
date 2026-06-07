@@ -8,6 +8,8 @@ Students create pixel art for fish, sea objects, trash, backgrounds and UI.
 
 Move the mouse to control the fishing hook.
 
+Each game lasts 2 minutes.
+
 Catch fish to gain points.
 
 Avoid jellyfish.
@@ -20,13 +22,13 @@ After 200 points, one big fish can appear.
 
 The big fish is worth 1000 points. It only bites if the hook is already carrying a fish. Small bait fish make the big fish very likely to escape, and it can still escape right before being collected. When it escapes, it returns to the sea instead of disappearing.
 
-The shark is a very rare fast danger. If it hits a fish on the hook, it steals the fish and locks the hook for 1 second.
+The shark is a very rare, very fast and large danger. If it hits anything on the hook, it eats it and locks the hook for 1 second.
 
 Difficulty increases with time:
 
-- 0-24 seconds: mostly fish, little trash, very few jellyfish.
-- 25-49 seconds: more trash and some jellyfish.
-- 50+ seconds: many trash items and jellyfish.
+- 0-39 seconds: mostly fish, little trash, very few jellyfish.
+- 40-79 seconds: more trash and some jellyfish.
+- 80+ seconds: many trash items and jellyfish.
 
 ## Technology
 
