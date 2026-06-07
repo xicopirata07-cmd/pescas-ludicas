@@ -16,9 +16,9 @@ Trash gives no points.
 
 Jellyfish shock the hook for 2 seconds and remove points.
 
-After 200 points, the big fish can appear.
+After 200 points, one big fish can appear.
 
-The big fish only bites if the hook is already carrying a fish. Small bait fish make the big fish very likely to escape, and it can still escape right before being collected.
+The big fish is worth 1000 points. It only bites if the hook is already carrying a fish. Small bait fish make the big fish very likely to escape, and it can still escape right before being collected. When it escapes, it returns to the sea instead of disappearing.
 
 The shark is a very rare fast danger. If it hits a fish on the hook, it steals the fish and locks the hook for 1 second.
 

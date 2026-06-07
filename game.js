@@ -32,6 +32,8 @@ let shockUntil = 0;
 let hookLockedUntil = 0;
 let statusMessage = "";
 let statusMessageUntil = 0;
+let bigFishHasSpawned = false;
+let bigFishCaught = false;
 
 // Placeholder entries for the students' future pixel art in /assets.
 const assetPlaceholders = [
@@ -61,7 +63,7 @@ const itemTypes = [
 const bigFishType = {
   name: "Peixe grande",
   kind: "bigFish",
-  points: 140,
+  points: 1000,
   color: "#2f9f8d",
   chance: 7,
   width: 150,
@@ -149,6 +151,8 @@ function startGame() {
   hookLockedUntil = 0;
   statusMessage = "";
   statusMessageUntil = 0;
+  bigFishHasSpawned = false;
+  bigFishCaught = false;
 
   startScreen.classList.add("hidden");
   gameOverScreen.classList.add("hidden");
@@ -184,12 +188,12 @@ function updateHook(timestamp) {
     carriedItem.y = hookY + 28;
 
     if (carriedItem.kind === "bigFish" && timestamp >= carriedItem.escapeAt) {
-      tryBigFishEscape(carriedItem);
+      tryBigFishEscape(carriedItem, timestamp);
       return;
     }
 
     if (!isShocked(timestamp) && !isHookLocked(timestamp) && hookY <= collectLineY) {
-      if (carriedItem.kind === "bigFish" && tryBigFishFinalEscape(carriedItem)) {
+      if (carriedItem.kind === "bigFish" && tryBigFishFinalEscape(carriedItem, timestamp)) {
         return;
       }
 
@@ -207,12 +211,32 @@ function updateItems(timestamp) {
   }
 
   for (const item of items) {
+    updateSpecialItemMovement(item, timestamp);
     item.x += item.speed * item.direction;
     item.swimOffset += 0.05;
     item.y += Math.sin(item.swimOffset) * 0.25;
   }
 
-  items = items.filter((item) => item.x > -140 && item.x < canvas.width + 140);
+  items = items.filter((item) => {
+    return item.kind === "bigFish" || (item.x > -140 && item.x < canvas.width + 140);
+  });
+}
+
+function updateSpecialItemMovement(item, timestamp) {
+  if (item.kind !== "bigFish") return;
+
+  if (item.fleeUntil && timestamp >= item.fleeUntil) {
+    item.direction = item.returnDirection;
+    item.speed = randomBetween(bigFishType.speedMin, bigFishType.speedMax);
+    item.fleeUntil = 0;
+    item.returnDirection = 0;
+  }
+
+  if (item.x < 30) {
+    item.direction = 1;
+  } else if (item.x + item.width > canvas.width - 30) {
+    item.direction = -1;
+  }
 }
 
 function spawnItem() {
@@ -229,6 +253,10 @@ function spawnItem() {
     speed: randomBetween(type.speedMin || 1.2, type.speedMax || 3.1),
     swimOffset: Math.random() * Math.PI * 2
   });
+
+  if (type.kind === "bigFish") {
+    bigFishHasSpawned = true;
+  }
 }
 
 function chooseItemType() {
@@ -236,7 +264,7 @@ function chooseItemType() {
   const category = chooseWeightedCategory(difficulty.weights);
   let availableTypes = itemTypes.filter((item) => item.kind === category);
 
-  if (category === "fish" && score >= bigFishUnlockScore) {
+  if (category === "fish" && score >= bigFishUnlockScore && !bigFishHasSpawned && !bigFishCaught) {
     availableTypes = [...availableTypes, bigFishType];
   }
 
@@ -340,10 +368,15 @@ function checkSharkStealCollision(timestamp) {
 
   if (!shark) return;
 
-  carriedItem = null;
+  if (carriedItem.kind === "bigFish") {
+    releaseBigFishToSea(carriedItem, timestamp, "O Tubarao assustou o peixe grande!");
+  } else {
+    carriedItem = null;
+    showStatus("O Tubarao roubou o peixe! Anzol preso 1 segundo.");
+  }
+
   hookLockedUntil = timestamp + hookLockDuration;
   items = items.filter((item) => item !== shark);
-  showStatus("O Tubarao roubou o peixe! Anzol preso 1 segundo.");
 }
 
 function checkBigFishBaitCollision(timestamp) {
@@ -373,6 +406,7 @@ function collectCarriedItem() {
     caughtCounts[carriedItem.name] = (caughtCounts[carriedItem.name] || 0) + 1;
   } else if (carriedItem.kind === "bigFish") {
     caughtCounts["Peixe grande"] = (caughtCounts["Peixe grande"] || 0) + 1;
+    bigFishCaught = true;
     showStatus("Peixe grande capturado! Grande pesca!");
   }
 
@@ -383,15 +417,20 @@ function collectCarriedItem() {
 
 function triggerShock(item, timestamp) {
   score += item.points;
+
+  if (carriedItem && carriedItem.kind === "bigFish") {
+    releaseBigFishToSea(carriedItem, timestamp, "A alforreca assustou o peixe grande!");
+  } else {
+    carriedItem = null;
+  }
+
   shockUntil = timestamp + shockDuration;
-  carriedItem = null;
   showStatus("Choque da alforreca! Espera 2 segundos.");
 }
 
-function tryBigFishEscape(bigFish) {
+function tryBigFishEscape(bigFish, timestamp) {
   if (Math.random() < bigFish.escapeChance) {
-    showStatus(`O peixe grande largou o anzol! Isco: ${bigFish.baitName}.`);
-    carriedItem = null;
+    releaseBigFishToSea(bigFish, timestamp, `O peixe grande largou o anzol! Isco: ${bigFish.baitName}.`);
     return;
   }
 
@@ -399,14 +438,32 @@ function tryBigFishEscape(bigFish) {
   carriedItem.escapeAt = Number.POSITIVE_INFINITY;
 }
 
-function tryBigFishFinalEscape(bigFish) {
+function tryBigFishFinalEscape(bigFish, timestamp) {
   if (Math.random() < bigFish.finalEscapeChance) {
-    showStatus("O peixe grande escapou mesmo à beira da água!");
-    carriedItem = null;
+    releaseBigFishToSea(bigFish, timestamp, "O peixe grande escapou mesmo à beira da água!");
     return true;
   }
 
   return false;
+}
+
+function releaseBigFishToSea(bigFish, timestamp, message) {
+  const escapeDirection = bigFish.direction ? -bigFish.direction : -1;
+  const returnDirection = bigFish.direction || 1;
+
+  items.push({
+    ...bigFishType,
+    x: hookX - bigFish.width / 2,
+    y: clamp(hookY + 42, seaTop + 60, canvas.height - 110),
+    direction: escapeDirection,
+    speed: 2.7,
+    swimOffset: Math.random() * Math.PI * 2,
+    fleeUntil: timestamp + 1200,
+    returnDirection
+  });
+
+  carriedItem = null;
+  showStatus(message);
 }
 
 function showStatus(message) {
@@ -456,7 +513,7 @@ function draw() {
   drawItems();
 
   if (carriedItem) {
-    drawItem(carriedItem);
+    drawItem(carriedItem, true, true);
   }
 
   drawFishingLine();
@@ -634,8 +691,10 @@ function drawItems() {
   }
 }
 
-function drawItem(item, showLabel = true) {
-  if (item.kind === "fish") {
+function drawItem(item, showLabel = true, caughtOnHook = false) {
+  if (caughtOnHook && (item.kind === "fish" || item.kind === "bigFish")) {
+    drawCaughtFishPlaceholder(item);
+  } else if (item.kind === "fish") {
     drawFishPlaceholder(item);
   } else if (item.kind === "bigFish") {
     drawBigFishPlaceholder(item);
@@ -687,6 +746,51 @@ function drawFishPlaceholder(item) {
   ctx.moveTo(centerX + 8 * item.direction, centerY + 3);
   ctx.lineTo(centerX + 18 * item.direction, centerY + 8);
   ctx.stroke();
+}
+
+function drawCaughtFishPlaceholder(item) {
+  // Fish on the hook are drawn head-up so they look attached to the line.
+  const centerX = item.x + item.width / 2;
+  const centerY = item.y + item.height / 2 + item.width * 0.12;
+  const bodyRadiusX = item.height * 0.45;
+  const bodyRadiusY = item.width * 0.28;
+  const noseY = centerY - bodyRadiusY;
+  const tailY = centerY + bodyRadiusY;
+
+  ctx.fillStyle = item.color;
+  ctx.beginPath();
+  ctx.ellipse(centerX, centerY, bodyRadiusX, bodyRadiusY, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(centerX, tailY + 18);
+  ctx.lineTo(centerX - bodyRadiusX, tailY - 2);
+  ctx.lineTo(centerX + bodyRadiusX, tailY - 2);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(centerX - 7, noseY + 16, 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#111111";
+  ctx.beginPath();
+  ctx.arc(centerX - 7, noseY + 15, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = "#111111";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(centerX + 9, centerY - 2);
+  ctx.lineTo(centerX + 17, centerY + 8);
+  ctx.stroke();
+
+  if (item.kind === "bigFish") {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(centerX - 20, centerY - 12, 9, 5);
+    ctx.fillRect(centerX + 6, centerY + 6, 9, 5);
+  }
 }
 
 function drawBigFishPlaceholder(item) {
