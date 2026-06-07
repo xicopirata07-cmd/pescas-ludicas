@@ -8,6 +8,7 @@ Suggested file names:
 - carapau.png
 - robalo.png
 - polvo.png
+- lula.png
 - peixe_grande.png
 - tubarao.png
 - alforreca.png

@@ -34,30 +34,30 @@ const restartButton = document.getElementById("restartButton");
 // 2. Constantes de configuracao
 // ============================================================
 
+// GAME_CONFIG vem de game-config.js e contem todos os valores faceis de editar.
+const config = window.GAME_CONFIG;
+
 // Linha onde a agua comeca. Tudo acima e ceu/terra; tudo abaixo e mar.
-const seaTop = 282;
+const seaTop = config.seaTop;
 
 // Quando o anzol chega aqui com um objeto, esse objeto e recolhido.
-const collectLineY = seaTop + 28;
+const collectLineY = seaTop + config.collectLineOffset;
 
 // Posicao horizontal fixa do anzol. O jogador controla apenas a altura.
-const hookX = 540;
+const hookX = config.hookX;
 
 // Limites verticais do anzol para ele nao sair do mar nem do ecra.
-const hookMinY = seaTop + 8;
-const hookMaxY = canvas.height - 54;
+const hookMinY = seaTop + config.hookTopPadding;
+const hookMaxY = canvas.height - config.hookBottomPadding;
 
 // Duracao total da partida em segundos. 120 segundos = 2 minutos.
-const gameSeconds = 120;
+const gameSeconds = config.gameSeconds;
 
 // Duracao do choque da alforreca em milissegundos.
-const shockDuration = 2000;
-
-// Duracao do bloqueio quando o tubarao come o que esta no anzol.
-const hookLockDuration = 1000;
+const shockDuration = config.shockDuration;
 
 // O peixe grande so pode aparecer depois desta pontuacao.
-const bigFishUnlockScore = 200;
+const bigFishUnlockScore = config.bigFishUnlockScore;
 
 // ============================================================
 // 3. Estado da partida
@@ -76,7 +76,6 @@ let lastSpawnTime = 0;
 let gameStartTime = 0;
 let animationId = 0;
 let shockUntil = 0;
-let hookLockedUntil = 0;
 let statusMessage = "";
 let statusMessageUntil = 0;
 let bigFishHasSpawned = false;
@@ -87,87 +86,27 @@ let bigFishCaught = false;
 // ============================================================
 
 // Placeholder entries for the students' future pixel art in /assets.
-const assetPlaceholders = [
-  "fisherman.png",
-  "cliffs.png",
-  "sardinha.png",
-  "carapau.png",
-  "robalo.png",
-  "polvo.png",
-  "peixe_grande.png",
-  "tubarao.png",
-  "alforreca.png",
-  "garrafa.png",
-  "bota.png"
-];
+const assetPlaceholders = config.assetPlaceholders;
 
-// Peixes normais, perigos e lixo. "chance" e o peso dentro da sua categoria.
-const itemTypes = [
-  { name: "Sardinha", kind: "fish", points: 10, color: "#f5c84c", chance: 32, width: 74, height: 34 },
-  { name: "Carapau", kind: "fish", points: 15, color: "#c4d0dc", chance: 24, width: 82, height: 36 },
-  { name: "Robalo", kind: "fish", points: 30, color: "#e8f7fb", chance: 13, width: 96, height: 40 },
-  { name: "Polvo", kind: "fish", points: 45, color: "#a96be0", chance: 7, width: 64, height: 44 },
-  { name: "Alforreca", kind: "danger", points: -20, color: "#ef4a3d", chance: 12, width: 76, height: 52 },
-  { name: "Garrafa", kind: "trash", points: 0, color: "#45b36a", chance: 7, width: 54, height: 34 },
-  { name: "Bota velha", kind: "trash", points: 0, color: "#9b671f", chance: 5, width: 64, height: 44 }
-];
+// Peixes normais vindos de game-config.js.
+const fishTypes = config.fish.map((fish) => ({
+  ...fish,
+  kind: "fish"
+}));
 
-// Peixe especial: aparece no maximo uma vez, vale muitos pontos e foge muito.
-const bigFishType = {
-  name: "Peixe grande",
-  kind: "bigFish",
-  points: 1000,
-  color: "#2f9f8d",
-  chance: 7,
-  width: 150,
-  height: 64,
-  speedMin: 0.5,
-  speedMax: 0.9
-};
+// Lixo e perigos vindos de game-config.js.
+const trashTypes = config.trash;
+const dangerTypes = [config.jellyfish];
 
-// Tubarao: perigo raro, muito grande e rapido. Come o que estiver no anzol.
-const sharkType = {
-  name: "Tubarao",
-  kind: "sharkHazard",
-  points: 0,
-  color: "#37516c",
-  chance: 2,
-  width: 220,
-  height: 92,
-  speedMin: 9,
-  speedMax: 12
-};
+// Peixe especial e tubarao tambem ficam no config.
+const bigFishType = config.bigFish;
+const sharkType = config.shark;
 
 // Probabilidade de o peixe grande fugir conforme o isco usado.
-// Iscos pequenos dao quase sempre fuga; polvo ainda e dificil, mas melhor.
-const bigFishEscapeChanceByBait = {
-  Sardinha: 0.98,
-  Carapau: 0.94,
-  Robalo: 0.86,
-  Polvo: 0.76
-};
+const bigFishEscapeChanceByBait = config.bigFishEscapeByBait;
 
-// Dificuldade por tempo. O jogo fica mais sujo/perigoso ao longo dos 2 minutos.
-const difficultyLevels = [
-  {
-    name: "Mar calmo",
-    startsAt: 0,
-    spawnDelay: 1050,
-    weights: { fish: 88, trash: 9, danger: 3 }
-  },
-  {
-    name: "Mar sujo",
-    startsAt: 40,
-    spawnDelay: 900,
-    weights: { fish: 66, trash: 24, danger: 10 }
-  },
-  {
-    name: "Mar perigoso",
-    startsAt: 80,
-    spawnDelay: 760,
-    weights: { fish: 44, trash: 34, danger: 22 }
-  }
-];
+// Dificuldade por tempo.
+const difficultyLevels = config.difficultyLevels;
 
 // ============================================================
 // 5. Eventos de entrada do jogador
@@ -184,14 +123,14 @@ restartButton.addEventListener("click", startGame);
 /*
   Le a posicao vertical do rato/toque dentro do canvas.
   O anzol segue essa posicao diretamente, sem fisica ou atraso.
-  Se o jogador estiver em choque ou com o anzol preso, ignoramos o input.
+  Se o jogador estiver em choque, ignoramos o input.
 */
 function updatePointer(event) {
   if (event.type === "touchmove") {
     event.preventDefault();
   }
 
-  if (!gameRunning || isShocked(performance.now()) || isHookLocked(performance.now())) {
+  if (!gameRunning || isShocked(performance.now())) {
     return;
   }
 
@@ -225,7 +164,6 @@ function startGame() {
   lastSpawnTime = 0;
   gameStartTime = performance.now();
   shockUntil = 0;
-  hookLockedUntil = 0;
   statusMessage = "";
   statusMessageUntil = 0;
   bigFishHasSpawned = false;
@@ -283,7 +221,7 @@ function updateHook(timestamp) {
       return;
     }
 
-    if (!isShocked(timestamp) && !isHookLocked(timestamp) && hookY <= collectLineY) {
+    if (!isShocked(timestamp) && hookY <= collectLineY) {
       if (carriedItem.kind === "bigFish" && tryBigFishFinalEscape(carriedItem, timestamp)) {
         return;
       }
@@ -341,7 +279,7 @@ function updateSpecialItemMovement(item, timestamp) {
 
 // Cria um novo peixe/lixo/perigo numa das laterais do ecrã.
 function spawnItem() {
-  const type = chooseItemType();
+  const type = prepareSpawnedItem(chooseItemType());
   const direction = Math.random() > 0.5 ? 1 : -1;
   const x = direction === 1 ? -90 : canvas.width + 90;
   const y = seaTop + 70 + Math.random() * (canvas.height - seaTop - 150);
@@ -360,6 +298,26 @@ function spawnItem() {
   }
 }
 
+// Prepara um objeto acabado de nascer, incluindo a versao shiny se sair sorte.
+function prepareSpawnedItem(type) {
+  if (type.kind !== "fish" && type.kind !== "bigFish") {
+    return type;
+  }
+
+  if (Math.random() >= (type.shinyChance || 0)) {
+    return type;
+  }
+
+  return {
+    ...type,
+    name: `${type.name} shiny`,
+    baseName: type.name,
+    isShiny: true,
+    points: type.points * config.shinyMultiplier,
+    color: invertColor(type.color)
+  };
+}
+
 /*
   Decide que tipo de objeto nasce agora.
   Primeiro escolhe a categoria geral pela dificuldade: fish/trash/danger.
@@ -368,7 +326,15 @@ function spawnItem() {
 function chooseItemType() {
   const difficulty = getCurrentDifficulty(performance.now());
   const category = chooseWeightedCategory(difficulty.weights);
-  let availableTypes = itemTypes.filter((item) => item.kind === category);
+  let availableTypes = [];
+
+  if (category === "fish") {
+    availableTypes = fishTypes;
+  } else if (category === "trash") {
+    availableTypes = trashTypes;
+  } else {
+    availableTypes = dangerTypes;
+  }
 
   if (category === "fish" && score >= bigFishUnlockScore && !bigFishHasSpawned && !bigFishCaught) {
     availableTypes = [...availableTypes, bigFishType];
@@ -493,9 +459,8 @@ function checkSharkStealCollision(timestamp) {
 
   const eatenName = carriedItem.name;
   carriedItem = null;
-  hookLockedUntil = timestamp + hookLockDuration;
-  items = items.filter((item) => item !== shark);
-  showStatus(`O Tubarao comeu ${eatenName}! Anzol preso 1 segundo.`);
+  shark.justAteUntil = timestamp + 800;
+  showStatus(`O Tubarao comeu ${eatenName}!`);
 }
 
 // O peixe grande so pode ser fisgado usando um peixe normal como isco.
@@ -504,7 +469,7 @@ function checkBigFishBaitCollision(timestamp) {
 
   if (!bigFish) return;
 
-  const baitName = carriedItem.name;
+  const baitName = carriedItem.baseName || carriedItem.name;
   const escapeChance = bigFishEscapeChanceByBait[baitName] || 0.8;
 
   carriedItem = {
@@ -524,7 +489,8 @@ function collectCarriedItem() {
   score += carriedItem.points;
 
   if (carriedItem.kind === "fish") {
-    caughtCounts[carriedItem.name] = (caughtCounts[carriedItem.name] || 0) + 1;
+    const countName = carriedItem.baseName || carriedItem.name;
+    caughtCounts[countName] = (caughtCounts[countName] || 0) + 1;
   } else if (carriedItem.kind === "bigFish") {
     caughtCounts["Peixe grande"] = (caughtCounts["Peixe grande"] || 0) + 1;
     bigFishCaught = true;
@@ -547,7 +513,7 @@ function triggerShock(item, timestamp) {
   }
 
   shockUntil = timestamp + shockDuration;
-  showStatus("Choque da alforreca! Espera 2 segundos.");
+  showStatus("Choque da alforreca! Espera 5 segundos.");
 }
 
 // Primeira tentativa de fuga do peixe grande depois de morder o isco.
@@ -605,11 +571,6 @@ function isShocked(timestamp) {
   return timestamp < shockUntil;
 }
 
-// Verdadeiro enquanto o tubarao deixou o anzol preso.
-function isHookLocked(timestamp) {
-  return timestamp < hookLockedUntil;
-}
-
 // Termina a partida e mostra o ecrã de fim de jogo.
 function endGame() {
   gameRunning = false;
@@ -635,6 +596,21 @@ function clamp(value, min, max) {
 // Sorteia um numero decimal entre minimo e maximo.
 function randomBetween(min, max) {
   return min + Math.random() * (max - min);
+}
+
+// Inverte uma cor hexadecimal para criar o efeito shiny.
+function invertColor(hexColor) {
+  const cleanHex = hexColor.replace("#", "");
+  const red = 255 - parseInt(cleanHex.slice(0, 2), 16);
+  const green = 255 - parseInt(cleanHex.slice(2, 4), 16);
+  const blue = 255 - parseInt(cleanHex.slice(4, 6), 16);
+
+  return `#${toHex(red)}${toHex(green)}${toHex(blue)}`;
+}
+
+// Transforma um numero 0-255 em dois caracteres hexadecimais.
+function toHex(value) {
+  return value.toString(16).padStart(2, "0");
 }
 
 // ============================================================
@@ -748,20 +724,18 @@ function drawCollectionPile() {
 /*
   Desenha a linha, boia e anzol.
   Quando ha choque, fica vermelho/amarelo.
-  Quando o tubarao prende o anzol, fica azul.
 */
 function drawFishingLine() {
   const shocked = isShocked(performance.now());
-  const locked = isHookLocked(performance.now());
 
-  ctx.strokeStyle = shocked ? "#ef4a3d" : locked ? "#2458ff" : "#111111";
+  ctx.strokeStyle = shocked ? "#ef4a3d" : "#111111";
   ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.moveTo(hookX, 76);
   ctx.lineTo(hookX, hookY);
   ctx.stroke();
 
-  ctx.fillStyle = shocked ? "#ffd34d" : locked ? "#82a3ff" : "#b9ff3d";
+  ctx.fillStyle = shocked ? "#ffd34d" : "#b9ff3d";
   ctx.beginPath();
   ctx.moveTo(hookX, hookY - 23);
   ctx.lineTo(hookX + 10, hookY - 7);
@@ -774,7 +748,7 @@ function drawFishingLine() {
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  ctx.strokeStyle = shocked ? "#ef4a3d" : locked ? "#2458ff" : "#111111";
+  ctx.strokeStyle = shocked ? "#ef4a3d" : "#111111";
   ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.moveTo(hookX, hookY + 9);
@@ -791,15 +765,6 @@ function drawFishingLine() {
     ctx.lineTo(hookX - 24, hookY + 8);
     ctx.lineTo(hookX + 4, hookY + 28);
     ctx.stroke();
-  } else if (locked) {
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(hookX - 18, hookY + 2);
-    ctx.lineTo(hookX + 18, hookY + 28);
-    ctx.moveTo(hookX + 18, hookY + 2);
-    ctx.lineTo(hookX - 18, hookY + 28);
-    ctx.stroke();
   }
 }
 
@@ -810,12 +775,13 @@ function drawHud() {
   drawText(`Carapau: ${caughtCounts.Carapau || 0}`, 32, 96, 18, "#111111");
   drawText(`Robalo: ${caughtCounts.Robalo || 0}`, 32, 120, 18, "#111111");
   drawText(`Polvo: ${caughtCounts.Polvo || 0}`, 32, 144, 18, "#111111");
-  drawText(`Peixe grande: ${caughtCounts["Peixe grande"] || 0}`, 32, 168, 18, "#111111");
+  drawText(`Lula: ${caughtCounts.Lula || 0}`, 32, 168, 18, "#111111");
+  drawText(`Peixe grande: ${caughtCounts["Peixe grande"] || 0}`, 32, 192, 18, "#111111");
 
   drawText(`Pontos: ${score}`, 838, 68, 28, "#111111", "bold");
   drawText(`Tempo: ${timeLeft}s`, 838, 104, 22, "#111111", "bold");
   drawText(`Peixe grande aparece aos ${bigFishUnlockScore} pontos`, 838, 132, 16, "#111111");
-  drawText("Tubarao raro rouba o isco", 838, 154, 16, "#111111");
+  drawText("Tubarao raro come o anzol", 838, 154, 16, "#111111");
   drawText(`Nivel: ${getCurrentDifficulty(performance.now()).name}`, 838, 176, 16, "#111111");
 
   if (carriedItem) {
@@ -826,9 +792,6 @@ function drawHud() {
   if (isShocked(performance.now())) {
     const secondsLeft = Math.ceil((shockUntil - performance.now()) / 1000);
     drawText(`Choque! Espera ${secondsLeft}s`, 456, 214, 24, "#ef4a3d", "bold");
-  } else if (isHookLocked(performance.now())) {
-    const secondsLeft = Math.ceil((hookLockedUntil - performance.now()) / 1000);
-    drawText(`Anzol preso! Espera ${secondsLeft}s`, 446, 214, 24, "#2458ff", "bold");
   } else if (performance.now() < statusMessageUntil) {
     drawText(statusMessage, 370, 214, 22, "#111111", "bold");
   }
@@ -848,6 +811,9 @@ function drawItems() {
   "caughtOnHook" desenha os peixes na vertical quando estao presos no anzol.
 */
 function drawItem(item, showLabel = true, caughtOnHook = false) {
+  if (item.name.includes("Lula") || item.baseName === "Lula") {
+    drawSquidPlaceholder(item, caughtOnHook);
+  } else 
   if (caughtOnHook && (item.kind === "fish" || item.kind === "bigFish")) {
     drawCaughtFishPlaceholder(item);
   } else if (item.kind === "fish") {
@@ -864,6 +830,10 @@ function drawItem(item, showLabel = true, caughtOnHook = false) {
 
   if (showLabel) {
     drawText(item.name, item.x + 4, item.y - 8, 14, "#10263f", "bold");
+
+    if (item.isShiny) {
+      drawText("x4", item.x + item.width - 22, item.y + item.height + 14, 16, "#7a1cff", "bold");
+    }
   }
 }
 
@@ -949,6 +919,50 @@ function drawCaughtFishPlaceholder(item) {
     ctx.fillRect(centerX - 20, centerY - 12, 9, 5);
     ctx.fillRect(centerX + 6, centerY + 6, 9, 5);
   }
+}
+
+// Desenho temporario da lula, no mar ou pendurada no anzol.
+function drawSquidPlaceholder(item, caughtOnHook = false) {
+  const centerX = item.x + item.width / 2;
+  const centerY = item.y + item.height / 2;
+
+  ctx.fillStyle = item.color;
+
+  if (caughtOnHook) {
+    ctx.beginPath();
+    ctx.ellipse(centerX, centerY - 12, item.height * 0.38, item.width * 0.22, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    for (let index = 0; index < 5; index += 1) {
+      const x = centerX - 20 + index * 10;
+      ctx.beginPath();
+      ctx.moveTo(x, centerY + 8);
+      ctx.lineTo(x - 4, centerY + 34);
+      ctx.strokeStyle = item.color;
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    }
+  } else {
+    ctx.beginPath();
+    ctx.ellipse(centerX, centerY, item.width * 0.28, item.height * 0.45, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const tentacleStart = item.direction === 1 ? item.x + 16 : item.x + item.width - 16;
+    for (let index = 0; index < 5; index += 1) {
+      const y = item.y + 8 + index * 7;
+      ctx.beginPath();
+      ctx.moveTo(tentacleStart, y);
+      ctx.lineTo(tentacleStart - 22 * item.direction, y + 4);
+      ctx.strokeStyle = item.color;
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    }
+  }
+
+  ctx.fillStyle = "#111111";
+  ctx.beginPath();
+  ctx.arc(centerX + 8, centerY - 7, 3, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 // Desenho temporario do peixe grande no mar.
