@@ -76,10 +76,12 @@ let gameRunning = false;
 let hookY = 390;
 let carriedItem = null;
 let items = [];
+let bubbles = [];
 let recentCatch = [];
 let caughtCounts = {};
 let catchSummary = {};
 let lastSpawnTime = 0;
+let nextBubbleSpawnTime = 0;
 let gameStartTime = 0;
 let animationId = 0;
 let shockUntil = 0;
@@ -163,10 +165,12 @@ function startGame() {
   hookY = 390;
   carriedItem = null;
   items = [];
+  bubbles = [];
   recentCatch = [];
   caughtCounts = {};
   catchSummary = {};
   lastSpawnTime = 0;
+  nextBubbleSpawnTime = 0;
   gameStartTime = performance.now();
   shockUntil = 0;
   statusMessage = "";
@@ -194,6 +198,7 @@ function gameLoop(timestamp) {
   updateTimer(timestamp);
   updateHook(timestamp);
   updateItems(timestamp);
+  updateBubbles(timestamp);
   checkCollisions(timestamp);
   draw();
 
@@ -265,6 +270,41 @@ function updateItems(timestamp) {
   items = items.filter((item) => {
     return item.kind === "bigFish" || (item.x > -140 && item.x < canvas.width + 140);
   });
+}
+
+// Cria e move bolhas decorativas na agua.
+function updateBubbles(timestamp) {
+  if (timestamp >= nextBubbleSpawnTime) {
+    spawnBubbleGroup();
+    nextBubbleSpawnTime = timestamp + randomBetween(600, 1600);
+  }
+
+  for (const bubble of bubbles) {
+    bubble.age += 1;
+    bubble.y -= bubble.speed;
+    bubble.x += Math.sin(bubble.age * 0.05 + bubble.phase) * 0.35;
+    bubble.alpha = Math.max(0, Math.min(0.55, (bubble.y - seaTop) / 180));
+  }
+
+  bubbles = bubbles.filter((bubble) => bubble.y > seaTop + 12 && bubble.alpha > 0.02);
+}
+
+// Pequenos grupos ficam mais naturais do que uma bolha isolada perfeita.
+function spawnBubbleGroup() {
+  const groupX = randomBetween(80, canvas.width - 80);
+  const groupSize = Math.floor(randomBetween(2, 5));
+
+  for (let index = 0; index < groupSize; index += 1) {
+    bubbles.push({
+      x: groupX + randomBetween(-18, 18),
+      y: canvas.height + randomBetween(0, 80),
+      radius: randomBetween(3, 8),
+      speed: randomBetween(0.45, 1.1),
+      phase: Math.random() * Math.PI * 2,
+      age: 0,
+      alpha: 0.35
+    });
+  }
 }
 
 /*
@@ -595,8 +635,10 @@ function collectCarriedItem() {
     showStatus("Peixe grande capturado! Grande pesca!");
   }
 
-  recentCatch.unshift({ ...carriedItem });
-  recentCatch = recentCatch.slice(0, 5);
+  if (carriedItem.kind === "fish" || carriedItem.kind === "bigFish") {
+    recentCatch.push({ ...carriedItem });
+  }
+
   carriedItem = null;
 }
 
@@ -753,8 +795,10 @@ function draw() {
 
   drawSky();
   drawSea();
+  drawBubbles();
   drawCliffs();
   drawFishermanPlaceholder();
+  drawCollectionPile();
   drawItems();
 
   if (carriedItem) {
@@ -789,19 +833,93 @@ function drawSea() {
   ctx.stroke();
 }
 
+// Desenha bolhas discretas a subir dentro da agua.
+function drawBubbles() {
+  for (const bubble of bubbles) {
+    ctx.strokeStyle = `rgba(237, 250, 255, ${bubble.alpha})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = `rgba(255, 255, 255, ${bubble.alpha * 0.55})`;
+    ctx.beginPath();
+    ctx.arc(bubble.x - bubble.radius * 0.3, bubble.y - bubble.radius * 0.3, bubble.radius * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 // Desenha as arribas/rochas temporarias.
 function drawCliffs() {
   if (drawSceneArtIfReady("cliffs.png", 0, 154, canvas.width, 140)) {
     return;
   }
 
-  ctx.fillStyle = "#ffd34d";
-  ctx.fillRect(0, 194, 448, 96);
-  ctx.fillRect(660, 194, canvas.width - 660, 96);
+  drawCliffShape([
+    [0, 178],
+    [74, 166],
+    [156, 174],
+    [254, 160],
+    [356, 182],
+    [448, 176],
+    [448, 292],
+    [0, 292]
+  ]);
 
-  ctx.fillStyle = "#d39b28";
-  ctx.fillRect(0, 286, 448, 8);
-  ctx.fillRect(660, 286, canvas.width - 660, 8);
+  drawCliffShape([
+    [660, 176],
+    [742, 160],
+    [834, 172],
+    [930, 154],
+    [1036, 168],
+    [1128, 158],
+    [canvas.width, 174],
+    [canvas.width, 292],
+    [660, 292]
+  ]);
+
+  drawRockPatch(36, 220, 88, 38, "#b88f3f");
+  drawRockPatch(180, 202, 110, 52, "#c79a48");
+  drawRockPatch(332, 226, 84, 42, "#b28338");
+  drawRockPatch(704, 214, 120, 46, "#b98d3c");
+  drawRockPatch(876, 198, 92, 38, "#caa052");
+  drawRockPatch(1050, 226, 104, 44, "#ae8037");
+
+  ctx.fillStyle = "#8d6a32";
+  ctx.fillRect(0, 286, 448, 7);
+  ctx.fillRect(660, 286, canvas.width - 660, 7);
+}
+
+// Forma base das arribas temporarias.
+function drawCliffShape(points) {
+  ctx.fillStyle = "#d8b35b";
+  ctx.beginPath();
+  ctx.moveTo(points[0][0], points[0][1]);
+
+  for (let index = 1; index < points.length; index += 1) {
+    ctx.lineTo(points[index][0], points[index][1]);
+  }
+
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = "#a47a35";
+  ctx.lineWidth = 4;
+  ctx.stroke();
+}
+
+// Manchas simples de rocha para os placeholders parecerem menos planos.
+function drawRockPatch(x, y, width, height, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x, y + height * 0.45);
+  ctx.lineTo(x + width * 0.22, y);
+  ctx.lineTo(x + width * 0.78, y + height * 0.08);
+  ctx.lineTo(x + width, y + height * 0.56);
+  ctx.lineTo(x + width * 0.62, y + height);
+  ctx.lineTo(x + width * 0.12, y + height * 0.88);
+  ctx.closePath();
+  ctx.fill();
 }
 
 // Desenha o pescador temporario.
@@ -826,6 +944,30 @@ function drawFishermanPlaceholder() {
   ctx.moveTo(696, 94);
   ctx.quadraticCurveTo(618, 8, hookX, 76);
   ctx.stroke();
+}
+
+/*
+  Desenha os peixes ja apanhados como um monte natural.
+  E desenhado antes do HUD, por isso os paineis ficam sempre por cima.
+*/
+function drawCollectionPile() {
+  recentCatch.forEach((item, index) => {
+    const column = index % 8;
+    const row = Math.floor(index / 8);
+    const wobbleX = Math.sin(index * 1.9) * 18;
+    const wobbleY = Math.cos(index * 1.3) * 9;
+    const sizeScale = item.kind === "bigFish" ? 0.58 : 0.72;
+    const smallItem = {
+      ...item,
+      x: 56 + column * 34 + wobbleX,
+      y: 242 - row * 24 - column * 5 + wobbleY,
+      width: Math.max(38, item.width * sizeScale),
+      height: Math.max(22, item.height * sizeScale),
+      direction: index % 2 === 0 ? 1 : -1
+    };
+
+    drawItem(smallItem);
+  });
 }
 
 /*
