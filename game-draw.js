@@ -77,7 +77,7 @@ function getItemArtFile(item) {
   Decide qual desenho usar para cada objeto.
   "caughtOnHook" desenha os peixes na vertical quando estao presos no anzol.
 */
-function drawItem(item, showLabel = true, caughtOnHook = false) {
+function drawItem(item, caughtOnHook = false) {
   const assetWasDrawn = drawItemArtIfReady(item, caughtOnHook);
 
   if (assetWasDrawn) {
@@ -96,14 +96,6 @@ function drawItem(item, showLabel = true, caughtOnHook = false) {
     drawJellyfishPlaceholder(item);
   } else {
     drawTrashPlaceholder(item);
-  }
-
-  if (showLabel) {
-    drawText(item.name, item.x + 4, item.y - 8, 14, "#10263f", "bold");
-
-    if (item.isShiny) {
-      drawText("x4", item.x + item.width - 22, item.y + item.height + 14, 16, "#7a1cff", "bold");
-    }
   }
 }
 
@@ -160,6 +152,16 @@ function drawArtImage(image, options) {
   const drawCtx = options.drawCtx;
   const centerX = options.x + options.width / 2;
   const centerY = options.y + options.height / 2;
+  const imageRatio = image.naturalWidth / image.naturalHeight;
+  const boxRatio = options.width / options.height;
+  let drawWidth = options.width;
+  let drawHeight = options.height;
+
+  if (imageRatio > boxRatio) {
+    drawHeight = options.width / imageRatio;
+  } else {
+    drawWidth = options.height * imageRatio;
+  }
 
   drawCtx.save();
   drawCtx.imageSmoothingEnabled = false;
@@ -171,7 +173,7 @@ function drawArtImage(image, options) {
   drawCtx.translate(centerX, centerY);
   drawCtx.rotate(options.rotation || 0);
   drawCtx.scale(options.flipX ? -1 : 1, 1);
-  drawCtx.drawImage(image, -options.width / 2, -options.height / 2, options.width, options.height);
+  drawCtx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
   drawCtx.restore();
 }
 
@@ -382,7 +384,6 @@ function drawJellyfishPlaceholder(item) {
     ctx.stroke();
   }
 
-  drawText("Alforreca", item.x + 6, item.y + 36, 16, "#7330e8", "bold");
 }
 
 // Desenho temporario do lixo: garrafa ou bota velha.
@@ -412,7 +413,7 @@ function drawTrashPlaceholder(item) {
 // Helper pequeno para escrever texto no Canvas sempre da mesma forma.
 function drawText(text, x, y, size, color, weight = "normal") {
   ctx.fillStyle = color;
-  ctx.font = `${weight} ${size}px Arial`;
+  ctx.font = `${weight} ${size}px "Trebuchet MS", Verdana, Arial, sans-serif`;
   ctx.fillText(text, x, y);
 }
 
@@ -432,11 +433,11 @@ function drawFinalSummary(summaryItems) {
   summaryCtx.fillRect(0, 0, summaryCanvas.width, summaryCanvas.height);
 
   summaryCtx.fillStyle = "#10263f";
-  summaryCtx.font = "bold 24px Arial";
+  summaryCtx.font = 'bold 24px "Trebuchet MS", Verdana, Arial, sans-serif';
   summaryCtx.fillText("Resumo da pesca", 24, 36);
 
   if (summaryItems.length === 0) {
-    summaryCtx.font = "18px Arial";
+    summaryCtx.font = '18px "Trebuchet MS", Verdana, Arial, sans-serif';
     summaryCtx.fillText("Ainda nao foi recolhido nenhum peixe, lixo ou perigo.", 24, 86);
     return;
   }
@@ -455,10 +456,10 @@ function drawFinalSummary(summaryItems) {
     drawSummaryIcon(summaryCtx, icon);
 
     summaryCtx.fillStyle = "#10263f";
-    summaryCtx.font = "bold 17px Arial";
+    summaryCtx.font = 'bold 17px "Trebuchet MS", Verdana, Arial, sans-serif';
     summaryCtx.fillText(item.name, 102, rowY);
 
-    summaryCtx.font = "16px Arial";
+    summaryCtx.font = '16px "Trebuchet MS", Verdana, Arial, sans-serif';
     summaryCtx.fillText(`${item.quantity} x ${item.points} pontos = ${item.totalPoints}`, 340, rowY);
   });
 }
@@ -477,12 +478,6 @@ function drawSummaryIcon(summaryCtx, item) {
       height: item.height,
       invert: Boolean(item.isShiny)
     });
-
-    if (item.isShiny) {
-      summaryCtx.fillStyle = "#7a1cff";
-      summaryCtx.font = "bold 12px Arial";
-      summaryCtx.fillText("x4", item.x + item.width - 18, item.y + item.height + 8);
-    }
 
     return;
   }
@@ -511,9 +506,4 @@ function drawSummaryIcon(summaryCtx, item) {
     summaryCtx.fill();
   }
 
-  if (item.isShiny) {
-    summaryCtx.fillStyle = "#7a1cff";
-    summaryCtx.font = "bold 12px Arial";
-    summaryCtx.fillText("x4", item.x + item.width - 18, item.y + item.height + 8);
-  }
 }

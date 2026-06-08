@@ -8,9 +8,37 @@
   sem mexer na logica principal em game.js.
 
   Notas sobre probabilidades:
-  - "chance" e um peso relativo dentro da categoria.
-    Exemplo: Sardinha chance 32 e Polvo chance 7 significa que a sardinha
-    aparece muito mais vezes do que o polvo quando o jogo escolhe "fish".
+  - O jogo usa duas camadas de probabilidade:
+
+    1. Primeiro escolhe uma categoria geral em difficultyLevels:
+       fish, trash ou danger.
+
+       Exemplo:
+       weights: { fish: 88, trash: 9, danger: 3 }
+
+       Isto quer dizer que, nessa fase do jogo, aparecem muitos peixes,
+       pouco lixo e poucos perigos.
+
+    2. Depois de escolher a categoria, o jogo escolhe um objeto dentro
+       dessa categoria usando o valor "chance".
+
+       Exemplo:
+       Sardinha chance 32 e Polvo chance 7 significa que, quando o jogo
+       ja escolheu a categoria "fish", a Sardinha aparece muito mais
+       vezes do que o Polvo.
+
+  - Muito importante:
+    Se mudares o Tubarao para chance 80, isso nao quer dizer que ele
+    aparece 80% das vezes no jogo todo.
+
+    O Tubarao so compete dentro da categoria "danger".
+    Para aparecerem mais tubaroes no jogo todo, tambem tens de aumentar
+    danger em difficultyLevels.
+
+    O mesmo vale para lixo:
+    aumentar a chance da Garrafa ou da Bota so muda qual lixo aparece.
+    Para aparecer mais lixo no jogo todo, aumenta trash em difficultyLevels.
+
   - "shinyChance" e uma probabilidade real entre 0 e 1.
     Exemplo: 0.02 = 2% de chance de esse peixe nascer shiny.
   - Os shinies valem sempre os pontos normais x shinyMultiplier.
@@ -58,6 +86,35 @@ window.GAME_CONFIG = {
   // ------------------------------
   // Peixes normais
   // ------------------------------
+  /*
+    Campos usados nos peixes:
+
+    name:
+    - Nome que aparece no jogo e no resumo final.
+
+    points:
+    - Pontos ganhos quando o jogador recolhe esse peixe.
+
+    color:
+    - Cor do desenho temporario, usada quando nao existe imagem PNG em assets.
+    - Se houver imagem, a imagem substitui este desenho.
+
+    chance:
+    - Peso dentro da categoria "fish".
+    - So e usado depois de o jogo ja ter escolhido que vai aparecer um peixe.
+
+    shinyChance:
+    - Probabilidade real de nascer shiny.
+    - 0.01 = 1%, 0.05 = 5%, 0.5 = 50%.
+
+    width e height:
+    - Tamanho do objeto no jogo.
+    - Tambem controlam o tamanho da imagem PNG se existir.
+
+    speedMin e speedMax:
+    - Velocidade minima e maxima.
+    - O jogo escolhe uma velocidade aleatoria entre estes dois valores.
+  */
   fish: [
     {
       name: "Sardinha",
@@ -119,6 +176,16 @@ window.GAME_CONFIG = {
   // ------------------------------
   // Peixe grande especial
   // ------------------------------
+  /*
+    O peixe grande nao aparece por chance normal.
+    Ele aparece quando:
+    - ja passaram bigFishUnlockSeconds segundos;
+    - o jogador tem mais de bigFishUnlockScore pontos;
+    - nao existe outro peixe grande ativo no mar.
+
+    Se for capturado ou comido pelo tubarao, pode aparecer outro mais tarde.
+    Se fugir do anzol, volta para o mar e continua a ser o mesmo peixe grande.
+  */
   bigFish: {
     name: "Peixe grande",
     kind: "bigFish",
@@ -141,6 +208,8 @@ window.GAME_CONFIG = {
     points: -20,
     color: "#ef4a3d",
     chance: 12,
+    // chance: peso dentro da categoria "danger".
+    // Se danger for baixo em difficultyLevels, as alforrecas continuam raras.
     width: 76,
     height: 52,
     speedMin: 1.2,
@@ -153,6 +222,9 @@ window.GAME_CONFIG = {
     points: 0,
     color: "#37516c",
     chance: 2,
+    // chance: peso dentro da categoria "danger", junto com a Alforreca.
+    // Para o Tubarao aparecer muito, aumenta esta chance E aumenta danger
+    // em difficultyLevels.
     width: 260,
     height: 110,
     speedMin: 13,
@@ -166,6 +238,8 @@ window.GAME_CONFIG = {
       points: -10,
       color: "#45b36a",
       chance: 7,
+      // chance: peso dentro da categoria "trash".
+      // Para aparecer mais lixo no jogo todo, aumenta trash em difficultyLevels.
       width: 54,
       height: 34,
       speedMin: 1.2,
@@ -177,6 +251,9 @@ window.GAME_CONFIG = {
       points: -20,
       color: "#9b671f",
       chance: 5,
+      // chance: peso dentro da categoria "trash".
+      // Este valor decide se aparece mais Bota velha ou mais Garrafa
+      // depois de o jogo ja ter escolhido a categoria trash.
       width: 64,
       height: 44,
       speedMin: 1.2,
@@ -187,6 +264,30 @@ window.GAME_CONFIG = {
   // ------------------------------
   // Dificuldade ao longo do tempo
   // ------------------------------
+  /*
+    Aqui esta a primeira camada de probabilidade.
+
+    startsAt:
+    - Segundo da partida em que este nivel comeca.
+    - startsAt: 40 quer dizer que este nivel comeca aos 40 segundos.
+
+    spawnDelay:
+    - Tempo em milissegundos entre novos objetos.
+    - Numero menor = aparecem objetos mais depressa.
+    - 1000 = mais ou menos 1 objeto por segundo.
+
+    weights:
+    - Decide a categoria geral do proximo objeto.
+    - fish = peixes normais.
+    - trash = lixo.
+    - danger = alforrecas e tubarao.
+
+    Exemplo:
+    weights: { fish: 50, trash: 30, danger: 20 }
+
+    Isto nao precisa somar 100, mas e mais facil pensar como percentagens.
+    Neste exemplo, cerca de metade dos objetos seriam peixes.
+  */
   difficultyLevels: [
     {
       name: "Mar calmo",

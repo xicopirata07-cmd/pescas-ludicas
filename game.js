@@ -92,9 +92,6 @@ let bigFishCaught = false;
 // 4. Dados dos objetos do jogo
 // ============================================================
 
-// Placeholder entries for the students' future pixel art in /assets.
-const assetPlaceholders = config.assetPlaceholders;
-
 // Peixes normais vindos de game-config.js.
 const fishTypes = config.fish.map((fish) => ({
   ...fish,
@@ -758,28 +755,20 @@ function draw() {
   drawSea();
   drawCliffs();
   drawFishermanPlaceholder();
-  drawCollectionPile();
   drawItems();
 
   if (carriedItem) {
-    drawItem(carriedItem, true, true);
+    drawItem(carriedItem, true);
   }
 
   drawFishingLine();
   drawHud();
 }
 
-// Desenha o ceu e os pontinhos decorativos do fundo.
+// Desenha o ceu limpo.
 function drawSky() {
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, canvas.width, seaTop);
-
-  ctx.fillStyle = "#b7c0c9";
-  for (let y = 18; y < seaTop - 20; y += 32) {
-    for (let x = 20; x < canvas.width; x += 36) {
-      ctx.fillRect(x, y, 3, 3);
-    }
-  }
 }
 
 // Desenha a agua e uma linha ondulada na superficie.
@@ -788,13 +777,13 @@ function drawSea() {
   waterGradient.addColorStop(0, "#55c0e6");
   waterGradient.addColorStop(1, "#4ba5df");
   ctx.fillStyle = waterGradient;
-  ctx.fillRect(20, seaTop, canvas.width - 40, canvas.height - seaTop - 18);
+  ctx.fillRect(0, seaTop, canvas.width, canvas.height - seaTop);
 
   ctx.strokeStyle = "#f7fbff";
   ctx.lineWidth = 5;
   ctx.beginPath();
-  ctx.moveTo(20, seaTop);
-  for (let x = 20; x <= canvas.width - 20; x += 24) {
+  ctx.moveTo(0, seaTop);
+  for (let x = 0; x <= canvas.width; x += 24) {
     ctx.lineTo(x, seaTop + Math.sin(x * 0.04) * 4);
   }
   ctx.stroke();
@@ -802,37 +791,34 @@ function drawSea() {
 
 // Desenha as arribas/rochas temporarias.
 function drawCliffs() {
-  if (drawSceneArtIfReady("cliffs.png", 18, 154, 1142, 140)) {
+  if (drawSceneArtIfReady("cliffs.png", 0, 154, canvas.width, 140)) {
     return;
   }
 
   ctx.fillStyle = "#ffd34d";
-  ctx.fillRect(18, 194, 430, 96);
-  ctx.fillRect(660, 194, 500, 96);
+  ctx.fillRect(0, 194, 448, 96);
+  ctx.fillRect(660, 194, canvas.width - 660, 96);
 
   ctx.fillStyle = "#d39b28";
-  ctx.fillRect(18, 286, 430, 8);
-  ctx.fillRect(660, 286, 500, 8);
-
-  drawText("Arribas e rochas", 144, 246, 28, "#111111", "bold");
-  drawText("Arribas e rochas", 820, 246, 28, "#111111", "bold");
+  ctx.fillRect(0, 286, 448, 8);
+  ctx.fillRect(660, 286, canvas.width - 660, 8);
 }
 
 // Desenha o pescador temporario.
 function drawFishermanPlaceholder() {
-  if (!drawSceneArtIfReady("fisherman.png", 624, 6, 190, 190)) {
-    ctx.fillStyle = "#62c462";
-    ctx.beginPath();
-    ctx.moveTo(715, 12);
-    ctx.lineTo(798, 92);
-    ctx.lineTo(766, 196);
-    ctx.lineTo(666, 196);
-    ctx.lineTo(634, 92);
-    ctx.closePath();
-    ctx.fill();
-
-    drawText("Pescador", 668, 124, 24, "#111111", "bold");
+  if (drawSceneArtIfReady("fisherman.png", 624, 6, 190, 190)) {
+    return;
   }
+
+  ctx.fillStyle = "#62c462";
+  ctx.beginPath();
+  ctx.moveTo(715, 12);
+  ctx.lineTo(798, 92);
+  ctx.lineTo(766, 196);
+  ctx.lineTo(666, 196);
+  ctx.lineTo(634, 92);
+  ctx.closePath();
+  ctx.fill();
 
   ctx.strokeStyle = "#7330e8";
   ctx.lineWidth = 12;
@@ -840,23 +826,6 @@ function drawFishermanPlaceholder() {
   ctx.moveTo(696, 94);
   ctx.quadraticCurveTo(618, 8, hookX, 76);
   ctx.stroke();
-}
-
-// Desenha no topo esquerdo os ultimos peixes recolhidos.
-function drawCollectionPile() {
-  drawText("Peixes apanhados", 178, 166, 22, "#111111", "bold");
-
-  recentCatch.forEach((item, index) => {
-    const smallItem = {
-      ...item,
-      x: 94 + index * 58,
-      y: 132 + (index % 2) * 24,
-      width: 58,
-      height: 28,
-      direction: 1
-    };
-    drawItem(smallItem, false);
-  });
 }
 
 /*
@@ -908,33 +877,45 @@ function drawFishingLine() {
 
 // Desenha pontuacao, tempo, contadores, nivel e mensagens temporarias.
 function drawHud() {
-  drawText("Tipos de peixe", 32, 42, 22, "#111111", "bold");
-  drawText(`Sardinha: ${caughtCounts.Sardinha || 0}`, 32, 72, 18, "#111111");
-  drawText(`Carapau: ${caughtCounts.Carapau || 0}`, 32, 96, 18, "#111111");
-  drawText(`Robalo: ${caughtCounts.Robalo || 0}`, 32, 120, 18, "#111111");
-  drawText(`Polvo: ${caughtCounts.Polvo || 0}`, 32, 144, 18, "#111111");
-  drawText(`Lula: ${caughtCounts.Lula || 0}`, 32, 168, 18, "#111111");
-  drawText(`Peixe grande: ${caughtCounts["Peixe grande"] || 0}`, 32, 192, 18, "#111111");
+  drawHudPanel(20, 20, 260, 188);
+  drawHudPanel(824, 24, 346, 158);
 
-  drawText(`Pontos: ${score}`, 838, 68, 28, "#111111", "bold");
-  drawText(`Tempo: ${timeLeft}s`, 838, 104, 22, "#111111", "bold");
-  drawText(`Peixe grande aparece aos ${bigFishUnlockScore} pontos`, 838, 132, 16, "#111111");
-  drawText("Tubarao raro come o anzol", 838, 154, 16, "#111111");
-  drawText(`Nivel: ${getCurrentDifficulty(performance.now()).name}`, 838, 176, 16, "#111111");
+  drawText("Tipos de peixe", 42, 56, 24, "#10263f", "bold");
+  drawText(`Sardinha: ${caughtCounts.Sardinha || 0}`, 42, 88, 18, "#10263f");
+  drawText(`Carapau: ${caughtCounts.Carapau || 0}`, 42, 112, 18, "#10263f");
+  drawText(`Robalo: ${caughtCounts.Robalo || 0}`, 42, 136, 18, "#10263f");
+  drawText(`Polvo: ${caughtCounts.Polvo || 0}`, 42, 160, 18, "#10263f");
+  drawText(`Lula: ${caughtCounts.Lula || 0}`, 42, 184, 18, "#10263f");
+
+  drawText(`Pontos: ${score}`, 846, 66, 30, "#10263f", "bold");
+  drawText(`Tempo: ${timeLeft}s`, 846, 104, 24, "#10263f", "bold");
+  drawText(`Peixe grande: ${caughtCounts["Peixe grande"] || 0}`, 846, 134, 17, "#10263f");
+  drawText(`Nivel: ${getCurrentDifficulty(performance.now()).name}`, 846, 158, 17, "#10263f");
 
   if (carriedItem) {
     const baitText = carriedItem.baitName ? ` com isco ${carriedItem.baitName}` : "";
-    drawText(`A subir: ${carriedItem.name}${baitText}`, 438, 246, 22, "#111111", "bold");
+    drawHudPanel(350, 214, 500, 44);
+    drawText(`A subir: ${carriedItem.name}${baitText}`, 370, 243, 21, "#10263f", "bold");
   }
 
   if (isShocked(performance.now())) {
     const secondsLeft = Math.ceil((shockUntil - performance.now()) / 1000);
-    drawText(`Choque! Espera ${secondsLeft}s`, 456, 214, 24, "#ef4a3d", "bold");
+    drawHudPanel(420, 214, 360, 44);
+    drawText(`Choque! Espera ${secondsLeft}s`, 446, 243, 23, "#ef4a3d", "bold");
   } else if (performance.now() < statusMessageUntil) {
-    drawText(statusMessage, 370, 214, 22, "#111111", "bold");
+    drawHudPanel(330, 214, 540, 44);
+    drawText(statusMessage, 350, 243, 21, "#10263f", "bold");
   }
+}
 
-  drawText("Placeholders: " + assetPlaceholders.slice(0, 4).join(", ") + "...", 32, 690, 14, "#0d3850");
+// Caixa opaca para garantir que nenhum peixe passa por cima da interface.
+function drawHudPanel(x, y, width, height) {
+  ctx.fillStyle = "rgba(248, 252, 255, 0.96)";
+  ctx.fillRect(x, y, width, height);
+
+  ctx.strokeStyle = "rgba(16, 38, 63, 0.2)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, width, height);
 }
 
 // Desenha todos os objetos livres que estao no mar.
