@@ -221,7 +221,7 @@ window.GAME_CONFIG = {
     kind: "sharkHazard",
     points: 0,
     color: "#37516c",
-    chance: 30
+    chance: 30,
     // chance: peso dentro da categoria "danger", junto com a Alforreca.
     // Para o Tubarao aparecer muito, aumenta esta chance E aumenta danger
     // em difficultyLevels.
